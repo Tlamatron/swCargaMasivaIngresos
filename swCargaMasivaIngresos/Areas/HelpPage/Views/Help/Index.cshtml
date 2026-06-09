@@ -1,0 +1,45 @@
+@using System.Web.Http
+@using System.Web.Http.Controllers
+@using System.Web.Http.Description
+@using System.Collections.ObjectModel
+@using swCargaMasivaIngresos.Areas.HelpPage.Models
+@model Collection<ApiDescription>
+
+@{
+    ViewBag.Title = "API Carga Masiva Ingresos v.01";
+
+    // Group APIs by controller
+    ILookup<HttpControllerDescriptor, ApiDescription> apiGroups = Model.ToLookup(api => api.ActionDescriptor.ControllerDescriptor);
+}
+
+<link type="text/css" href="~/Areas/HelpPage/HelpPage.css" rel="stylesheet" />
+<header class="help-page">
+    <div class="content-wrapper">
+        <div class="float-left">
+            <h1>@ViewBag.Title</h1>
+        </div>
+    </div>
+</header>
+<div id="body" class="help-page">
+    <section class="featured">
+        <div class="content-wrapper">
+            <h2>Introducci&oacute;n</h2>
+            <p>
+                Bienvenido a la documentaci&oacute;n t&eacute;cnica de la <strong>API Carga Masiva Ingresos</strong>.
+                Esta plataforma est&aacute; construida bajo una arquitectura de alto rendimiento, dise&ntilde;ada espec&iacute;ficamente para la gesti&oacute;n y procesamiento de archivos TXT de gran volumen.
+            </p>
+            <p><strong>Bondades tecnol&oacute;gicas implementadas:</strong></p>
+            <ul>
+                <li><strong>&#128274; Seguridad Centralizada y Desacoplada:</strong> El m&oacute;dulo de Seguridad valida las credenciales directamente mediante Procedimientos Almacenados (SPs). Esto blinda la base de datos contra inyecciones SQL y garantiza que las aplicaciones cliente (Front-end) jam&aacute;s conozcan las cadenas de conexi&oacute;n o reglas de negocio internas.</li>
+                <li><strong>&#128640; Procesamiento As&iacute;ncrono por Fragmentos (Chunks):</strong> El motor de recepci&oacute;n permite subir archivos de cientos de megabytes reban&aacute;ndolos en partes peque&ntilde;as. Esto evita la saturaci&oacute;n de memoria RAM (OutOfMemory) en los servidores del Estado. Una vez ensamblado el archivo, la inserci&oacute;n masiva se delega en segundo plano al motor <em>Hangfire</em>, utilizando <code>SqlBulkCopy</code> y operaciones <code>MERGE</code> para un rendimiento extremo.</li>
+                <li><strong>&#128225; Trazabilidad en Tiempo Real:</strong> El endpoint de Estatus expone un mecanismo de seguimiento (Polling) basado en un Folio &uacute;nico. Esto permite a las plataformas externas consultar el avance exacto de la carga, con contadores de &eacute;xitos y fallos, sin necesidad de mantener conexiones HTTP abiertas durante el proceso pesado.</li>
+            </ul>
+        </div>
+    </section>
+    <section class="content-wrapper main-content clear-fix">
+        @foreach (var group in apiGroups)
+        {
+            @Html.DisplayFor(m => group, "ApiGroup")
+        }
+    </section>
+</div>
