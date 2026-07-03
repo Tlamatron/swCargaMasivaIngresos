@@ -19,7 +19,7 @@ namespace swCargaMasivaIngresos.Services
 			DataTable tablaLote = CrearEstructuraPagos();
 			HashSet<string> pagosProcesados = new HashSet<string>();
 
-			LogService.WriteLogAsync(AppName, "INFO", param.UsuarioLogin, "ProcesadorPagosTXT", $"Inicia lectura de archivo de Pagos Locales (Etiquetado). Folio: {param.FolioCarga}");
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPagosTXT", $"Inicia lectura de archivo de Pagos Locales (Etiquetado). Folio: {param.FolioCarga}");
 
 			using (var reader = new StreamReader(rutaArchivo, Encoding.UTF8))
 			{

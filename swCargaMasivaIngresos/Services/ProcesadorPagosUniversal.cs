@@ -17,7 +17,7 @@ namespace swCargaMasivaIngresos.Services
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 			string extension = Path.GetExtension(rutaArchivo);
 
-			LogService.WriteLogAsync(AppName, "INFO", param.UsuarioLogin, "ProcesadorPagosUniversal", $"Inicia lectura inteligente de Pagos. Folio: {param.FolioCarga}. Extensión: {extension}");
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPagosUniversal", $"Inicia lectura inteligente de Pagos. Folio: {param.FolioCarga}. Extensión: {extension}");
 
 			// =========================================================================
 			// FASE 1: LECTURA CRUDA (Lee CSV, TXT o Excel)
@@ -81,7 +81,7 @@ namespace swCargaMasivaIngresos.Services
 			resultadoFinal.RegistrosFallidos = limpieza.TablaRechazados.Rows.Count;
 			resultadoFinal.ErroresDetalle.AddRange(limpieza.DetallesErrores);
 
-			LogService.WriteLogAsync(AppName, "INFO", param.UsuarioLogin, "ProcesadorPagosUniversal",
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPagosUniversal",
 				$"Fin. Éxitos: {resultadoFinal.RegistrosExitosos}, Errores: {resultadoFinal.RegistrosFallidos}, Ignorados (Viejos): {limpieza.RegistrosIgnorados}");
 			resultadoFinal.TablaRechazados = limpieza.TablaRechazados;
 			return resultadoFinal;

@@ -12,30 +12,33 @@ namespace swCargaMasivaIngresos.Services
 	/// </summary>
 	public static class LogService
 	{
-		/// <summary>
-		/// Método para escribir un log en el servicio de logs. Utiliza patrón Fire-and-Forget para no bloquear el hilo principal.
-		/// </summary>
+		// Centralizamos el nombre de la aplicación leyendo la llave del Web.config
+		private static readonly string AppNameWebConfig = ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
+
 		private static readonly HttpClient _httpClient = new HttpClient
 		{
-			// Reducimos el timeout a 3 segundos. Al ser en segundo plano, no importa mucho, 
-			// pero libera el socket más rápido si hay problemas de red.
 			Timeout = TimeSpan.FromSeconds(3)
 		};
 
 		/// <summary>
-		/// Método para escribir en el servicio de logs. No devuelve nada al llamador, ya que se ejecuta en un hilo de fondo.
+		/// Escribe un log de error o advertencia en segundo plano. Filtra eventos de información (INFO/OK).
 		/// </summary>
-		/// <param name="appName"></param>
-		/// <param name="nivel"></param>
-		/// <param name="usuario"></param>
-		/// <param name="origen"></param>
-		/// <param name="mensaje"></param>
-		/// <returns></returns>
-		public static Task WriteLogAsync(string appName, string nivel, string usuario, string origen, string mensaje)
+		public static Task WriteLogAsync(string nivel, string usuario, string origen, string mensaje)
 		{
-			// 🚀 PATRÓN FIRE-AND-FORGET: 
-			// Encolamos el trabajo en un hilo de fondo de IIS.
-			// El usuario final NO espera a que este bloque de código termine.
+			// 1. FILTRO DE AHORRO: Si es informativo, salimos inmediatamente para proteger el servidor de logs
+			if (nivel.Equals("INFO", StringComparison.OrdinalIgnoreCase) ||
+				nivel.Equals("OK", StringComparison.OrdinalIgnoreCase))
+			{
+				return Task.FromResult(0);
+			}
+
+			// 2. RECUPERACIÓN AUTOMÁTICA DE IDENTIDAD (Fallback para solicitudes Web)
+			if (string.IsNullOrWhiteSpace(usuario))
+			{
+				usuario = System.Web.HttpContext.Current?.User?.Identity?.Name ?? "SISTEMA_ETL";
+			}
+
+			// 3. ENCOLA EL LOG EN SEGUNDO PLANO (Fire-and-Forget)
 			HostingEnvironment.QueueBackgroundWorkItem(async cancellationToken =>
 			{
 				try
@@ -45,16 +48,12 @@ namespace swCargaMasivaIngresos.Services
 						? ConfigurationManager.AppSettings["LogServiceUrlProd"]
 						: ConfigurationManager.AppSettings["LogServiceUrlTest"];
 
-					string urlFinal = $"{baseUrl}/{appName}";
+					string urlFinal = $"{baseUrl}/{AppNameWebConfig}";
 
-					string logMessage = $"| {usuario} | {nivel} | {origen} | {mensaje}";
+					string logMessage = $"| {usuario} | {nivel.ToUpper()} | {origen} | {mensaje}";
 					var content = new StringContent($"\"{logMessage}\"", Encoding.UTF8, "application/json");
 
-					// 🚀 Esto viaja por la red en segundo plano.
-					var response = await _httpClient.PostAsync(urlFinal, content, cancellationToken);
-
-					// 📌 Solo leemos la respuesta si el programador está depurando. 
-					// En Producción, evitamos gastar memoria leyendo el body de la respuesta.
+					await _httpClient.PostAsync(urlFinal, content, cancellationToken);
 #if DEBUG
 					string responseBody = await response.Content.ReadAsStringAsync();
 					System.Diagnostics.Debug.WriteLine($"[LOG {nivel}] {response.StatusCode} - {responseBody}");
@@ -66,7 +65,6 @@ namespace swCargaMasivaIngresos.Services
 				}
 			});
 
-			// 🚀 Devolvemos el control INMEDIATAMENTE al AuthController / VisualController
 			return Task.FromResult(0);
 		}
 	}

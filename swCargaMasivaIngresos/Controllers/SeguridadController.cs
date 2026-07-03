@@ -8,6 +8,9 @@ using System.Web.Http;
 
 namespace swCargaMasivaIngresos.Controllers
 {
+	/// <summary>
+	/// Controlador API encargado de la seguridad y autenticación de usuarios. Expone endpoints para validar credenciales de login y obtener el menú dinámico basado en el rol del usuario. Utiliza procedimientos almacenados en la base de datos para realizar las validaciones y obtener la información necesaria.
+	/// </summary>
 	[RoutePrefix("api/Seguridad")]
 	public class SeguridadController : ApiController
 	{
@@ -66,7 +69,7 @@ namespace swCargaMasivaIngresos.Controllers
 			catch (Exception ex)
 			{
 				// Registramos el error internamente y devolvemos 500
-				Services.LogService.WriteLogAsync("APICargaMasivaIngresos", "ERROR", request.Usuario, "SeguridadController", $"Fallo en Login: {ex.Message}").Wait();
+				Services.LogService.WriteLogAsync("ERROR", request.Usuario, "SeguridadController", $"Fallo en Login: {ex.Message}").Wait();
 				return InternalServerError(ex);
 			}
 		}

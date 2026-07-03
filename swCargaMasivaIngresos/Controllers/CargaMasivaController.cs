@@ -69,7 +69,7 @@ namespace swCargaMasivaIngresos.Controllers
 					// 🚀 Pasamos ambos datos: quién sube (oficinaIdReal) y para quién es (claveMunicipioDestino)
 					ControlCargasService.RegistrarInicio(folioCarga, oficinaIdReal, usuarioLogin, tipoCargaId, claveMunicipioDestino);
 
-					await LogService.WriteLogAsync(AppName, "INFO", usuarioLogin, "CargaMasivaController", $"Inicia recepción de archivo: {nombreArchivoOriginal}. Folio: {folioCarga}. TipoCarga: {tipoCargaId}");
+					await LogService.WriteLogAsync("INFO", usuarioLogin, "CargaMasivaController", $"Inicia recepción de archivo: {nombreArchivoOriginal}. Folio: {folioCarga}. TipoCarga: {tipoCargaId}");
 				}
 
 				if (httpRequest.Files.Count == 0) return BadRequest("No se encontró ningún archivo.");
@@ -96,7 +96,7 @@ namespace swCargaMasivaIngresos.Controllers
 
 					BackgroundJob.Enqueue(() => MotorPrincipalCarga.EjecutarEnSegundoPlano(rutaArchivoCompleto, extension, parametros));
 
-					await LogService.WriteLogAsync(AppName, "INFO", usuarioLogin, "CargaMasivaController", $"Archivo ensamblado. Tarea encolada. Folio: {folioCarga}");
+					await LogService.WriteLogAsync("INFO", usuarioLogin, "CargaMasivaController", $"Archivo ensamblado. Tarea encolada. Folio: {folioCarga}");
 					ControlCargasService.ActualizarEstatus(folioCarga, "Encolado en Hangfire");
 				}
 
@@ -113,7 +113,7 @@ namespace swCargaMasivaIngresos.Controllers
 			{
 				string usuarioFallo = HttpContext.Current.Request.Form["usuarioLogin"] ?? "Desconocido";
 				string folioFallo = HttpContext.Current.Request.Form["folioCarga"] ?? "SinFolio";
-				await LogService.WriteLogAsync(AppName, "ERROR", usuarioFallo, "CargaMasivaController", $"[Folio: {folioFallo}] Error: {ex.Message}");
+				await LogService.WriteLogAsync("ERROR", usuarioFallo, "CargaMasivaController", $"[Folio: {folioFallo}] Error: {ex.Message}");
 				return InternalServerError(ex);
 			}
 		}

@@ -85,7 +85,7 @@ namespace swCargaMasivaIngresos.Controllers
 			}
 			catch (Exception ex)
 			{
-				LogService.WriteLogAsync(System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos", "ERROR", "", "EstadísticasController", ex.Message);
+				LogService.WriteLogAsync("ERROR", "", "EstadísticasController", ex.Message);
 				return InternalServerError(ex);
 			}
 		}

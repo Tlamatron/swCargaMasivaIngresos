@@ -19,7 +19,7 @@ namespace swCargaMasivaIngresos.Services
 			DataTable tablaLote = CrearEstructuraReducciones();
 			HashSet<string> reduccionesProcesadas = new HashSet<string>();
 
-			LogService.WriteLogAsync(AppName, "INFO", param.UsuarioLogin, "ProcesadorReduccionesTXT", $"Inicia lectura de archivo de Descuentos. Folio: {param.FolioCarga}");
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorReduccionesTXT", $"Inicia lectura de archivo de Descuentos. Folio: {param.FolioCarga}");
 
 			using (var reader = new StreamReader(rutaArchivo, Encoding.UTF8))
 			{

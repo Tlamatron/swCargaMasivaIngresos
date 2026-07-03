@@ -38,7 +38,7 @@ namespace swCargaMasivaIngresos.Services
 					string extractoErrores = resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0
 						? string.Join(" | ", resultado.ErroresDetalle.Take(5))
 						: "Sin detalles específicos.";
-					await LogService.WriteLogAsync(AppName, "WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"La carga terminó con {resultado.RegistrosFallidos} fallos y {resultado.RegistrosExitosos} exitosos.");
+					await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"La carga terminó con {resultado.RegistrosFallidos} fallos y {resultado.RegistrosExitosos} exitosos.");
 				}
 
 				// 2. Avisamos a la BD que el proceso terminó bien, pasando los contadores
@@ -50,7 +50,7 @@ namespace swCargaMasivaIngresos.Services
 
 				// 3. Avisamos a la BD que hubo un fallo catastrófico
 				ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Error Fatal", 0, 1, ex.Message);
-				await LogService.WriteLogAsync(AppName, "ERROR", parametros.UsuarioLogin, "MotorPrincipalCarga", $"ERROR FATAL: {ex.Message}");
+				await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "MotorPrincipalCarga", $"ERROR FATAL: {ex.Message}");
 				throw;
 			}
 			finally
@@ -87,11 +87,11 @@ namespace swCargaMasivaIngresos.Services
 				// --- INTEGRACIÓN DE LOG DE RESUMEN / ADVERTENCIAS ---
 				if (resultado.RegistrosFallidos > 0)
 				{
-					await LogService.WriteLogAsync(AppName, "WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] La carga de la {nombreOficina} terminó con {resultado.RegistrosFallidos} registros fallidos por layout y {resultado.RegistrosExitosos} exitosos.");
+					await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] La carga de la {nombreOficina} terminó con {resultado.RegistrosFallidos} registros fallidos por layout y {resultado.RegistrosExitosos} exitosos.");
 				}
 				else
 				{
-					await LogService.WriteLogAsync(AppName, "INFO", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] Carga masiva de la {nombreOficina} finalizada. {resultado.RegistrosExitosos} registros insertados correctamente.");
+					await LogService.WriteLogAsync("INFO", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] Carga masiva de la {nombreOficina} finalizada. {resultado.RegistrosExitosos} registros insertados correctamente.");
 				}
 			}
 			catch (Exception ex)
@@ -104,7 +104,7 @@ namespace swCargaMasivaIngresos.Services
 					ErroresDetalle = new System.Collections.Generic.List<string> { "Error fatal al leer el archivo: " + ex.Message }
 				};
 
-				await LogService.WriteLogAsync(AppName, "ERROR", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] ERROR FATAL: {ex.Message}. Traza: {ex.StackTrace}");
+				await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] ERROR FATAL: {ex.Message}. Traza: {ex.StackTrace}");
 			}
 		
 			finally
@@ -125,7 +125,7 @@ namespace swCargaMasivaIngresos.Services
 			}
 			else
 			{
-				await LogService.WriteLogAsync(AppName, "WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] No se envió correo porque no se proporcionó una dirección válida.");
+				await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] No se envió correo porque no se proporcionó una dirección válida.");
 			}
 		}
 	}

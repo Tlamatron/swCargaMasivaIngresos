@@ -22,7 +22,7 @@ namespace swCargaMasivaIngresos.Services
 			DataTable tablaLote = CrearEstructuraPadron();
 			HashSet<string> cuentasProcesadas = new HashSet<string>();
 
-			LogService.WriteLogAsync(AppName, "INFO", param.UsuarioLogin, "ProcesadorPadronTXT", $"Inicia lectura de archivo Folio: {param.FolioCarga}");
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT", $"Inicia lectura de archivo Folio: {param.FolioCarga}");
 
 			using (var reader = new StreamReader(rutaArchivo, Encoding.UTF8))
 			{
@@ -197,7 +197,7 @@ namespace swCargaMasivaIngresos.Services
 				if (tablaLote.Rows.Count > 0) InsertarLoteEnBD(tablaLote, param);
 			}
 
-			LogService.WriteLogAsync(AppName, "INFO", param.UsuarioLogin, "ProcesadorPadronTXT",
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT",
 				$"Fin. Éxitos: {resultado.RegistrosExitosos}, Errores: {resultado.ErroresDetalle.Count}");
 
 			return resultado;
@@ -271,7 +271,7 @@ namespace swCargaMasivaIngresos.Services
 			}
 			catch (SqlException ex)
 			{
-				LogService.WriteLogAsync(AppName, "ERROR", param.UsuarioLogin, "SqlBulkCopy/SP", ex.Message).Wait();
+				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "SqlBulkCopy/SP", ex.Message).Wait();
 				throw;
 			}
 		}

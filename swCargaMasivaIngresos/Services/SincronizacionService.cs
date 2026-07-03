@@ -27,7 +27,7 @@ namespace swCargaMasivaIngresos.Services
 					throw new Exception($"No hay configuración de Web Service activa para la Oficina {oficinaId}.");
 				}
 
-				await LogService.WriteLogAsync(AppName, "INFO", usuarioLogin, "SincronizacionService", $"Iniciando sincronización para Oficina {oficinaId}. Endpoint: {config.EndpointUrl}");
+				await LogService.WriteLogAsync("INFO", usuarioLogin, "SincronizacionService", $"Iniciando sincronización para Oficina {oficinaId}. Endpoint: {config.EndpointUrl}");
 
 				// 2. Pedirle a la Fábrica el traductor correcto
 				IMunicipioAdapter adaptador = FabricaAdaptadoresWS.ObtenerAdaptador(oficinaId);
@@ -44,13 +44,13 @@ namespace swCargaMasivaIngresos.Services
 				// de SqlBulkCopy, idéntico a como lo haces con los TXT y Excel.
 				// ================================================================
 
-				await LogService.WriteLogAsync(AppName, "INFO", usuarioLogin, "SincronizacionService", $"Sincronización exitosa. Se obtuvieron y tradujeron {datosListos.Count} registros del municipio.");
+				await LogService.WriteLogAsync("INFO", usuarioLogin, "SincronizacionService", $"Sincronización exitosa. Se obtuvieron y tradujeron {datosListos.Count} registros del municipio.");
 			}
 			catch (Exception ex)
 			{
 				resultado.RegistrosFallidos = 1;
 				resultado.ErroresDetalle.Add(ex.Message);
-				await LogService.WriteLogAsync(AppName, "ERROR", usuarioLogin, "SincronizacionService", $"Fallo grave en sincronización de Oficina {oficinaId}: {ex.Message}");
+				await LogService.WriteLogAsync("ERROR", usuarioLogin, "SincronizacionService", $"Fallo grave en sincronización de Oficina {oficinaId}: {ex.Message}");
 			}
 
 			return resultado;

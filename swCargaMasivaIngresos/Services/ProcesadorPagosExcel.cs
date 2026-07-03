@@ -19,7 +19,7 @@ namespace swCargaMasivaIngresos.Services
 			DataTable tablaLote = CrearEstructuraPagos();
 			HashSet<string> pagosProcesados = new HashSet<string>();
 
-			LogService.WriteLogAsync(AppName, "INFO", param.UsuarioLogin, "ProcesadorPagosExcel", $"Inicia lectura de archivo Excel de Pagos. Folio: {param.FolioCarga}");
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPagosExcel", $"Inicia lectura de archivo Excel de Pagos. Folio: {param.FolioCarga}");
 
 			using (var stream = File.Open(rutaArchivo, FileMode.Open, FileAccess.Read))
 			using (var reader = ExcelReaderFactory.CreateReader(stream))

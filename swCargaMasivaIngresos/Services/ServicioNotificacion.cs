@@ -121,7 +121,7 @@ namespace swCargaMasivaIngresos.Services
 			}
 			catch (Exception ex)
 			{
-				await LogService.WriteLogAsync(AppName, "ERROR", parametros.UsuarioLogin, "ServicioNotificacion", $"[Folio: {parametros.FolioCarga}] ERROR NOTIFICACIÓN: Falló el envío de correo a {correoUsuario}. Detalle: {ex.Message}");
+				await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "ServicioNotificacion", $"[Folio: {parametros.FolioCarga}] ERROR NOTIFICACIÓN: Falló el envío de correo a {correoUsuario}. Detalle: {ex.Message}");
 			}
 		}
 
