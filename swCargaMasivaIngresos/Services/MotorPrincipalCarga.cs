@@ -1,6 +1,7 @@
 ﻿using swCargaMasivaIngresos.Models;
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
@@ -34,6 +35,9 @@ namespace swCargaMasivaIngresos.Services
 
 				if (resultado.RegistrosFallidos > 0)
 				{
+					string extractoErrores = resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0
+						? string.Join(" | ", resultado.ErroresDetalle.Take(5))
+						: "Sin detalles específicos.";
 					await LogService.WriteLogAsync(AppName, "WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"La carga terminó con {resultado.RegistrosFallidos} fallos y {resultado.RegistrosExitosos} exitosos.");
 				}
 

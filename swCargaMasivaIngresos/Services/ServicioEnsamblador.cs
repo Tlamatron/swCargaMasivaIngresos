@@ -15,7 +15,7 @@ namespace swCargaMasivaIngresos.Services
 		/// <param name="totalChunks">Número total de fragmentos esperados.</param>
 		/// <param name="rutaDirectorio">Ruta física en el servidor donde se alojan los fragmentos.</param>
 		/// <returns>La ruta completa y absoluta del nuevo archivo ensamblado.</returns>
-		public static string UnirFragmentos(string folioCarga, string nombreArchivoOriginal, int totalChunks, string rutaDirectorio)
+		public static string UnirFragmentos(int folioCarga, string nombreArchivoOriginal, int totalChunks, string rutaDirectorio)
 		{
 			// Rescatar si era .txt, .xlsx o .csv
 			string extension = Path.GetExtension(nombreArchivoOriginal);

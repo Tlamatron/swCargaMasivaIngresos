@@ -11,7 +11,7 @@ namespace swCargaMasivaIngresos.Services
 	public class ProcesadorPagosTXT : IProcesadorFormato
 	{
 		private readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
-		private readonly string CadenaConexion = System.Configuration.ConfigurationManager.ConnectionStrings["ConexionSQL"].ConnectionString;
+		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
 		{
@@ -112,7 +112,7 @@ namespace swCargaMasivaIngresos.Services
 			tabla.Columns.Add("ClaveMunicipio", typeof(string));
 			tabla.Columns.Add("TipoPredio", typeof(string));
 			tabla.Columns.Add("CuentaPredial", typeof(string));
-			tabla.Columns.Add("FolioCarga", typeof(string));
+			tabla.Columns.Add("FolioCarga", typeof(int));
 			tabla.Columns.Add("Bimestre", typeof(string));
 			return tabla;
 		}
@@ -125,12 +125,12 @@ namespace swCargaMasivaIngresos.Services
 
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "Operacion.Staging_Etiquetado";
+					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
 					bulkCopy.WriteToServer(lote);
 				}
 
 				// Llamamos al SP que marca las cuentas como pagadas
-				using (SqlCommand cmd = new SqlCommand("Operacion.sp_ProcesarMergeEtiquetado", conn))
+				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;

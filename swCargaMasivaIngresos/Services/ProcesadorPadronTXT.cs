@@ -14,7 +14,7 @@ namespace swCargaMasivaIngresos.Services
 	public class ProcesadorPadronTXT : IProcesadorFormato
 	{
 		private readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
-		private readonly string CadenaConexion = System.Configuration.ConfigurationManager.ConnectionStrings["ConexionSQL"].ConnectionString;
+		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
 		{
@@ -72,12 +72,31 @@ namespace swCargaMasivaIngresos.Services
 						continue;
 					}
 
-					// Columna 4: Folio Único (Opcional, pero si viene debe ser numérico BIGINT)
-					if (!string.IsNullOrWhiteSpace(col[3]) && !long.TryParse(col[3].Trim(), out _))
+					// Columna 4: Folio Único (Opcional, numérico BIGINT)
+					string folioUnicoStr = col[3].Trim();
+					// 1. Limpiamos cadenas que los sistemas suelen exportar en lugar de vacíos
+					if (folioUnicoStr.Equals("NULL", StringComparison.OrdinalIgnoreCase) ||
+						folioUnicoStr.Equals("NA", StringComparison.OrdinalIgnoreCase) ||
+						folioUnicoStr.Equals("-", StringComparison.OrdinalIgnoreCase))
 					{
-						MarcarError(resultado, numeroLinea, "Folio Único inválido (Debe ser exclusivamente numérico).");
-						continue;
+						folioUnicoStr = string.Empty;
 					}
+
+					// 2. Si realmente trae un valor, validamos que sea numérico
+					if (!string.IsNullOrWhiteSpace(folioUnicoStr))
+					{
+						if (!long.TryParse(folioUnicoStr, out _))
+						{
+							// 🚀 AHORA EL ERROR TE DIRÁ EXACTAMENTE QUÉ TEXTO RECIBIÓ
+							MarcarError(resultado, numeroLinea, $"Folio Único inválido. Se esperaba numérico pero se recibió: '{folioUnicoStr}'");
+							continue;
+						}
+					}
+					//if (!string.IsNullOrWhiteSpace(col[3]) && !long.TryParse(col[3].Trim(), out _))
+					//{
+					//	MarcarError(resultado, numeroLinea, "Folio Único inválido (Debe ser exclusivamente numérico).");
+					//	continue;
+					//}
 
 					// Columna 15: Tipo de Persona (Opcional, pero si viene debe ser 1 o 2)
 					if (!string.IsNullOrWhiteSpace(col[14]))
@@ -140,8 +159,8 @@ namespace swCargaMasivaIngresos.Services
 					tablaLote.Rows.Add(
 						claveMun.ToString(),                  // 1. Ya validado
 						tipoPre.ToString(),                   // 2. Ya validado
-						cuentaPredial,                        // 3. Cuenta Predial (Conserva ceros)
-						Utilerias.LimpiarCadena(col[3], 50),  // 4. Folio único
+						cuentaPredial,                        // 3.
+						Utilerias.LimpiarCadena(folioUnicoStr, 50), // 4 Usamos la variable limpia
 						Utilerias.LimpiarCadena(col[4], 150), // 5. Localidad
 						Utilerias.LimpiarCadena(col[5], 150), // 6. Calle
 						Utilerias.LimpiarCadena(col[6], 20),  // 7. Num Ext
@@ -218,7 +237,7 @@ namespace swCargaMasivaIngresos.Services
 			tabla.Columns.Add("Bimestre", typeof(string));
 			tabla.Columns.Add("ImpuestoDeterminado", typeof(decimal));
 			tabla.Columns.Add("FechaVigencia", typeof(DateTime));
-			tabla.Columns.Add("FolioCarga", typeof(string));
+			tabla.Columns.Add("FolioCarga", typeof(int));
 			return tabla;
 		}
 
@@ -233,14 +252,14 @@ namespace swCargaMasivaIngresos.Services
 					// PASO 1: Inyectar masivamente a la tabla Staging (Este se mantiene con BulkCopy por rendimiento)
 					using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 					{
-						bulkCopy.DestinationTableName = "dbo.Staging_Predial";
+						bulkCopy.DestinationTableName = "pred_Operacion.Staging_Predial";
 						bulkCopy.BatchSize = 10000;
 						bulkCopy.BulkCopyTimeout = 120;
 						bulkCopy.WriteToServer(lote);
 					}
 
 					// PASO 2: Llamada al Procedimiento Almacenado que hace el MERGE
-					using (SqlCommand cmd = new SqlCommand("dbo.sp_ProcesarMergePadron", conn))
+					using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergePadron", conn))
 					{
 						cmd.CommandType = CommandType.StoredProcedure;
 						cmd.CommandTimeout = 180; // 3 minutos máximo para procesar millones de registros

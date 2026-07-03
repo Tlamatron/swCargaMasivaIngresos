@@ -20,7 +20,7 @@ namespace swCargaMasivaIngresos.Models
 		/// <summary>
 		/// Folio único de la carga (GUID). El cliente debe capturarlo en la respuesta del primer fragmento y reenviarlo en los posteriores.
 		/// </summary>
-		public string FolioCarga { get; set; }
+		public int FolioCarga { get; set; }
 
 		/// <summary>
 		/// El número del fragmento (Chunk) que acaba de ser procesado por el servidor web.

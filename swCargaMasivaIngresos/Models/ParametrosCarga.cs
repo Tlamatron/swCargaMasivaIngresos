@@ -8,9 +8,9 @@ namespace swCargaMasivaIngresos.Models
 	public class ParametrosCarga
 	{
 		/// <summary>
-		/// Identificador único de la carga masiva, generado como un GUID. Este valor se utiliza para rastrear y correlacionar todas las operaciones, registros y logs asociados a esta carga específica a lo largo de su ciclo de vida.
+		/// Generado por sp
 		/// </summary>
-		public string FolioCarga { get; set; }
+		public int FolioCarga { get; set; }
 
 		/// <summary>
 		/// Identificador de la oficina para la cual se está realizando la carga masiva. Este valor es crucial para segmentar y organizar los datos, así como para aplicar las reglas de negocio específicas de cada oficina durante el procesamiento de la carga.
@@ -28,15 +28,15 @@ namespace swCargaMasivaIngresos.Models
 		/// </summary>
 		public int TipoCargaId { get; set; }
 		
-		/// <summary>
-		/// Periodo de inicio para el cual se está realizando la carga masiva.
-		/// </summary>
-		public int PeriodoInicio { get; set; }
+		///// <summary>
+		///// Periodo de inicio para el cual se está realizando la carga masiva.
+		///// </summary>
+		//public int PeriodoInicio { get; set; }
 
-		/// <summary>
-		/// Periodo de fin para el cual se está realizando la carga masiva. Este valor, junto con el periodo de inicio, define el rango temporal de los datos que se procesarán en esta carga. Es fundamental que ambos periodos sean consistentes y válidos para evitar errores durante el procesamiento y garantizar que los datos se asignen correctamente a los periodos correspondientes en la base de datos.
-		/// </summary>
-		public int PeriodoFin { get; set; }
+		///// <summary>
+		///// Periodo de fin para el cual se está realizando la carga masiva. Este valor, junto con el periodo de inicio, define el rango temporal de los datos que se procesarán en esta carga. Es fundamental que ambos periodos sean consistentes y válidos para evitar errores durante el procesamiento y garantizar que los datos se asignen correctamente a los periodos correspondientes en la base de datos.
+		///// </summary>
+		//public int PeriodoFin { get; set; }
 
 		/// <summary>
 		/// Correo electrónico al cual se enviarán las notificaciones relacionadas con el estado y resultado de la carga masiva. Este valor es esencial para mantener informados a los usuarios o administradores sobre el progreso, éxito o cualquier error que ocurra durante el proceso de carga. Es importante que este correo sea válido y esté monitoreado para asegurar una comunicación efectiva.

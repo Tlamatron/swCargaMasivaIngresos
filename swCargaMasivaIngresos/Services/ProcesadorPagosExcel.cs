@@ -1,14 +1,14 @@
-﻿using swCargaMasivaIngresos.Models;
+﻿using ExcelDataReader; // 🚀 Requiere el paquete NuGet: ExcelDataReader
+using swCargaMasivaIngresos.Models;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
-using System.Text;
 
 namespace swCargaMasivaIngresos.Services
 {
-	public class ProcesadorReduccionesTXT : IProcesadorFormato
+	public class ProcesadorPagosExcel : IProcesadorFormato
 	{
 		private readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
@@ -16,83 +16,78 @@ namespace swCargaMasivaIngresos.Services
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
-			DataTable tablaLote = CrearEstructuraReducciones();
-			HashSet<string> reduccionesProcesadas = new HashSet<string>();
+			DataTable tablaLote = CrearEstructuraPagos();
+			HashSet<string> pagosProcesados = new HashSet<string>();
 
-			LogService.WriteLogAsync(AppName, "INFO", param.UsuarioLogin, "ProcesadorReduccionesTXT", $"Inicia lectura de archivo de Descuentos. Folio: {param.FolioCarga}");
+			LogService.WriteLogAsync(AppName, "INFO", param.UsuarioLogin, "ProcesadorPagosExcel", $"Inicia lectura de archivo Excel de Pagos. Folio: {param.FolioCarga}");
 
-			using (var reader = new StreamReader(rutaArchivo, Encoding.UTF8))
+			using (var stream = File.Open(rutaArchivo, FileMode.Open, FileAccess.Read))
+			using (var reader = ExcelReaderFactory.CreateReader(stream))
 			{
-				string linea;
 				int numeroLinea = 0;
 
-				while ((linea = reader.ReadLine()) != null)
+				// 💡 Opcional: Si tus usuarios van a subir el Excel con una fila de encabezados, 
+				// descomenta la siguiente línea para que se salte la primera fila:
+				// reader.Read(); numeroLinea++;
+
+				while (reader.Read())
 				{
 					numeroLinea++;
-					if (string.IsNullOrWhiteSpace(linea)) continue;
 
-					string[] col = linea.Split('|');
-
-					// 1. Validar Layout estricto de 5 columnas
-					if (col.Length != 5)
+					// 1. Validar que el Excel tenga las 24 columnas
+					if (reader.FieldCount < 24)
 					{
-						MarcarError(resultado, numeroLinea, $"Columnas incorrectas. Se esperaban 5, llegaron {col.Length}.");
+						MarcarError(resultado, numeroLinea, $"Columnas incorrectas en Excel. Se esperaban al menos 24.");
 						continue;
 					}
 
-					// 2. Extraer y limpiar
-					string claveMunicipio = col[0].Trim();
-					string tipoPredio = col[1].Trim();
-					string cuentaPredial = col[2].Trim();
-					string folioUnico = col[3].Trim();
-					string tipoReduccion = col[4].Trim();
+					// 2. Extraer datos directamente por su índice (0 a 23)
+					// Utilizamos GetValue().ToString() para evitar errores si la celda es numérica o nula
+					string claveMunicipio = reader.GetValue(0)?.ToString().Trim();
+					string tipoPredio = reader.GetValue(1)?.ToString().Trim();
+					string cuentaPredial = reader.GetValue(2)?.ToString().Trim();
+					string strBimestre = reader.GetValue(21)?.ToString().Trim();
 
-					// 3. VALIDACIONES ESTRICTAS DE NEGOCIO
+					// 3. Validaciones de negocio (Las mismas que el TXT)
 					if (string.IsNullOrEmpty(cuentaPredial))
 					{
 						MarcarError(resultado, numeroLinea, "La Cuenta Predial es obligatoria.");
 						continue;
 					}
-
 					if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 					{
 						MarcarError(resultado, numeroLinea, "Clave de municipio inválida (1 a 217).");
 						continue;
 					}
-
 					if (!byte.TryParse(tipoPredio, out byte tipoPre) || tipoPre < 1 || tipoPre > 3)
 					{
 						MarcarError(resultado, numeroLinea, "Tipo de predio inválido (1=Urbano, 2=Rústico, 3=Suburbano).");
 						continue;
 					}
-
-					if (!byte.TryParse(tipoReduccion, out byte tipoRed) || tipoRed < 1)
+					if (!byte.TryParse(strBimestre, out byte bimestre) || bimestre > 6)
 					{
-						MarcarError(resultado, numeroLinea, "Tipo de Reducción inválido. Debe ser un número de catálogo válido.");
+						MarcarError(resultado, numeroLinea, "Bimestre inválido (Debe ser un número del 0 al 6).");
 						continue;
 					}
 
-					// 4. Evitar filas duplicadas idénticas en el mismo TXT
-					string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{tipoRed}";
-					if (reduccionesProcesadas.Contains(llaveUnica))
-					{
-						MarcarError(resultado, numeroLinea, $"La cuenta {cuentaPredial} ya tiene asignado el descuento {tipoRed} en este archivo.");
-						continue;
-					}
-					reduccionesProcesadas.Add(llaveUnica);
+					// 4. Lógica del HashSet para duplicados
+					string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{bimestre}";
+					if (pagosProcesados.Contains(llaveUnica)) continue;
 
-					// 5. Agregar a la tabla en memoria (Staging)
+					pagosProcesados.Add(llaveUnica);
+
+					// 5. Agregar a memoria
 					tablaLote.Rows.Add(
 						claveMun.ToString(),
 						tipoPre.ToString(),
 						cuentaPredial,
-						Utilerias.LimpiarCadena(folioUnico, 50),
-						tipoRed.ToString(),
-						param.FolioCarga
+						param.FolioCarga, // 🚀 Ya viene como int desde tu parámetro
+						bimestre.ToString()
 					);
 
 					resultado.RegistrosExitosos++;
 
+					// 6. Inyección masiva
 					if (tablaLote.Rows.Count >= 10000)
 					{
 						InsertarLoteEnBD(tablaLote, param);
@@ -109,18 +104,17 @@ namespace swCargaMasivaIngresos.Services
 		private void MarcarError(ResultadoProceso res, int linea, string msg)
 		{
 			res.RegistrosFallidos++;
-			res.ErroresDetalle.Add($"Línea {linea}: {msg}");
+			res.ErroresDetalle.Add($"Fila {linea}: {msg}");
 		}
 
-		private DataTable CrearEstructuraReducciones()
+		private DataTable CrearEstructuraPagos()
 		{
 			var tabla = new DataTable();
 			tabla.Columns.Add("ClaveMunicipio", typeof(string));
 			tabla.Columns.Add("TipoPredio", typeof(string));
 			tabla.Columns.Add("CuentaPredial", typeof(string));
-			tabla.Columns.Add("FolioUnico", typeof(string));
-			tabla.Columns.Add("TipoReduccion", typeof(string));
-			tabla.Columns.Add("FolioCarga", typeof(int));
+			tabla.Columns.Add("FolioCarga", typeof(int)); // 🚀 Con el int
+			tabla.Columns.Add("Bimestre", typeof(string));
 			return tabla;
 		}
 
@@ -129,15 +123,13 @@ namespace swCargaMasivaIngresos.Services
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
 				conn.Open();
-
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Reducciones";
+					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
 					bulkCopy.WriteToServer(lote);
 				}
 
-				// Llamamos al SP que mueve de Staging a la tabla relacional final
-				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeReducciones", conn))
+				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;

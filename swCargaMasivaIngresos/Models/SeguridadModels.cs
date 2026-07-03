@@ -19,5 +19,7 @@
 		public string CorreoElectronico { get; set; }
 		public int OficinaId { get; set; }
 		public string NombreOficina { get; set; }
+		public int RolId { get; set; }
+		public int ClaveMunicipio { get; set; }
 	}
 }

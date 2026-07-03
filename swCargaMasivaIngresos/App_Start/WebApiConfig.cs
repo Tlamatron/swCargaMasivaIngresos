@@ -14,7 +14,9 @@ namespace swCargaMasivaIngresos
 		{
 			// 1. Configuración de CORS Dinámico desde Cors.config
 			string ambiente = ConfigurationManager.AppSettings["Ambiente"] ?? "Test";
-			string origins = ConfigurationManager.AppSettings[$"CorsOrigins_{ambiente}"];
+			string[] originsArray = CorsSettings.GetCorsOrigins(ambiente);
+			string origins = string.Join(",", originsArray);
+
 
 			// Forzar origen seguro si por alguna razón la llave no se encuentra
 			if (string.IsNullOrEmpty(origins)) origins = "https://wscargamasivaingresos.puebla.gob.mx";

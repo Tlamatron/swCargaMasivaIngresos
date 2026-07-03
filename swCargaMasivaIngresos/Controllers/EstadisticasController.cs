@@ -1,4 +1,5 @@
 ﻿using swCargaMasivaIngresos.Models;
+using swCargaMasivaIngresos.Services;
 using System;
 using System.Data;
 using System.Data.SqlClient;
@@ -9,11 +10,10 @@ namespace swCargaMasivaIngresos.Controllers
 	/// <summary>
 	/// Controlador API encargado de proporcionar estadísticas y datos para el dashboard de monitoreo de cargas masivas. Expone un endpoint GET que devuelve un DTO con KPIs generales, datos para una gráfica de pastel y un listado de los top 5 focos rojos (oficinas con más errores). La información se obtiene a través de una consulta a la base de datos utilizando un procedimiento almacenado optimizado para este propósito.
 	/// </summary>
-	[Authorize]
 	[RoutePrefix("api/Estadisticas")]
 	public class EstadisticasController : ApiController
 	{
-		private readonly string CadenaConexion = System.Configuration.ConfigurationManager.ConnectionStrings["ConexionSQL"].ConnectionString;
+		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
 		/// Endpoint GET que devuelve un DTO con las estadísticas necesarias para el dashboard. El método ejecuta un procedimiento almacenado que retorna tres conjuntos de resultados: KPIs generales, datos para la gráfica de pastel y el top 5 de focos rojos. La respuesta se estructura en un objeto DashboardDTO que se envía al cliente.
@@ -21,19 +21,24 @@ namespace swCargaMasivaIngresos.Controllers
 		/// <returns></returns>
 		[HttpGet]
 		[Route("Dashboard")]
-		public IHttpActionResult ObtenerDashboard(int? oficinaId = null)
+		public IHttpActionResult ObtenerDashboard(int? oficinaId = null, byte? tipoCargaId = null)
 		{
 			try
 			{
 				DashboardDTO reporte = new DashboardDTO();
+				
+				if (reporte.Kpis == null) reporte.Kpis = new KpiGenerales();
+				if (reporte.Grafica == null) reporte.Grafica = new System.Collections.Generic.List<GraficaEstatus>();
+				if (reporte.FocosRojos == null) reporte.FocosRojos = new System.Collections.Generic.List<FocoRojo>();
 
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
-				using (SqlCommand cmd = new SqlCommand("dbo.sp_ObtenerEstadisticasDashboard", conn))
+				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ObtenerEstadisticasDashboard", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 
 					// 🚀 Le pasamos el parámetro al SP (Si es null, el SP devolverá todo el Estado)
 					cmd.Parameters.AddWithValue("@OficinaId", (object)oficinaId ?? DBNull.Value);
+					cmd.Parameters.AddWithValue("@TipoCargaId", (object)tipoCargaId ?? DBNull.Value);
 
 					conn.Open();
 
@@ -80,7 +85,7 @@ namespace swCargaMasivaIngresos.Controllers
 			}
 			catch (Exception ex)
 			{
-				// Aquí podrías agregar un log de error si lo deseas
+				LogService.WriteLogAsync(System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos", "ERROR", "", "EstadísticasController", ex.Message);
 				return InternalServerError(ex);
 			}
 		}

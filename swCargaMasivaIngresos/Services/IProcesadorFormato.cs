@@ -35,5 +35,7 @@ namespace swCargaMasivaIngresos.Services
 		/// <remarks>Contains human-readable messages describing individual errors. The list may be null or
 		/// empty.</remarks>
 		public List<string> ErroresDetalle { get; set; }
+
+		public System.Data.DataTable TablaRechazados { get; set; }
 	}
 }

@@ -13,6 +13,11 @@ namespace swCargaMasivaIngresos.Services
 	{
 		public override void OnActionExecuting(HttpActionContext actionContext)
 		{
+			if (actionContext.Request.Method == HttpMethod.Get)
+			{
+				return;
+			}
+
 			var method = actionContext.Request.Method;
 
 			// Solo validar si el método es POST o PUT (Los GET no llevan Body)
@@ -29,6 +34,7 @@ namespace swCargaMasivaIngresos.Services
 						"Formato no soportado. El Content-Type debe ser application/json o multipart/form-data."
 					);
 				}
+				base.OnActionExecuting(actionContext);
 			}
 		}
 	}

@@ -1,4 +1,5 @@
 ﻿using swCargaMasivaIngresos.Models;
+using swCargaMasivaIngresos.Services;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -10,7 +11,7 @@ namespace swCargaMasivaIngresos.Controllers
 	[RoutePrefix("api/Seguridad")]
 	public class SeguridadController : ApiController
 	{
-		private readonly string CadenaConexion = System.Configuration.ConfigurationManager.ConnectionStrings["ConexionSQL"].ConnectionString;
+		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
 		/// Valida las credenciales de un usuario contra la base de datos.
@@ -29,7 +30,7 @@ namespace swCargaMasivaIngresos.Controllers
 			try
 			{
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
-				using (SqlCommand cmd = new SqlCommand("dbo.sp_ValidarUsuario", conn))
+				using (SqlCommand cmd = new SqlCommand("pred_Seguridad.sp_ValidarUsuario", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.Parameters.AddWithValue("@UsuarioLogin", request.Usuario.Trim());
@@ -48,9 +49,10 @@ namespace swCargaMasivaIngresos.Controllers
 								NombreCompleto = reader["NombreCompleto"].ToString(),
 								CorreoElectronico = reader["CorreoElectronico"].ToString(),
 								OficinaId = Convert.ToInt32(reader["OficinaId"]),
-								NombreOficina = reader["NombreOficina"].ToString()
+								NombreOficina = reader["NombreOficina"].ToString(),
+								RolId = Convert.ToInt32(reader["RolId"]),
+								ClaveMunicipio = reader["ClaveMunicipio"] != DBNull.Value ? Convert.ToInt32(reader["ClaveMunicipio"]) : 0
 							};
-
 							return Ok(perfil);
 						}
 						else
@@ -84,7 +86,7 @@ namespace swCargaMasivaIngresos.Controllers
 				List<MenuDTO> listaMenus = new List<MenuDTO>();
 
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
-				using (SqlCommand cmd = new SqlCommand("dbo.sp_ObtenerMenuDinamico", conn))
+				using (SqlCommand cmd = new SqlCommand("pred_Seguridad.sp_ObtenerMenuDinamico", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.Parameters.AddWithValue("@AppId", appId);
