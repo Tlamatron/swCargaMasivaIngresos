@@ -32,56 +32,41 @@ namespace swCargaMasivaIngresos.Services
 					foreach (DataTable tablaExcel in dataSet.Tables)
 					{
 						string nombrePestaña = tablaExcel.TableName;
-						int filaEncabezadoReal = -1;
 
-						// 🚀 1. RADAR CON FILTRO DE DENSIDAD
-						for (int i = 0; i < Math.Min(50, tablaExcel.Rows.Count); i++)
-						{
-							var celdasLlenas = tablaExcel.Rows[i].ItemArray
-								.Select(x => x?.ToString().Trim() ?? "")
-								.Where(x => !string.IsNullOrWhiteSpace(x))
-								.ToList();
+						// 🚀 1. LECTURA POR REGIONES
+						int filaInicioDatos;
+						var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(tablaExcel, out filaInicioDatos);
 
-							string textoFilaComplet = string.Join(" ", celdasLlenas).ToUpper();
+						if (mapaCrudo.Count == 0) continue;
 
-							if (celdasLlenas.Count >= 3 && (textoFilaComplet.Contains("CUENTA") ||
-								textoFilaComplet.Contains("PREDIAL") || textoFilaComplet.Contains("CTA")))
-							{
-								filaEncabezadoReal = i;
-								break;
-							}
-						}
-
-						if (filaEncabezadoReal == -1) continue;
-
+						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraPadron();
-						var mapaColumnas = MapeadorInteligente.ObtenerMapaColumnasMultiFila(tablaExcel, filaEncabezadoReal, 3);
 
-						for (int i = filaEncabezadoReal + 1; i < tablaExcel.Rows.Count; i++)
+						// 🚀 2. EXTRACCIÓN A PARTIR DE LOS DATOS REALES
+						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
 							var fila = tablaExcel.Rows[i];
 
 							string textoInicioFila = string.Join(" ", fila.ItemArray.Take(3).Select(x => x?.ToString().ToUpper() ?? ""));
-							if (textoInicioFila.Contains("TOTAL") || string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) break;
+							if (textoInicioFila.Contains("TOTAL")) break;
 
-							string cuentaPredial = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "CUENTA", "PREDIAL", "CTA", "CTA.", "CLAVE");
+							if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
+
+							string cuentaPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "CuentaPredial");
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 
-							// 🚀 2. FILTRO ESTRICTO DE AÑO 
-							string anioPredial = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "AÑO", "EJERCICIO");
+							string anioPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio");
 							if (!string.IsNullOrWhiteSpace(anioPredial) && !anioPredial.Contains("2026")) continue;
 
 							DataRow nuevaFila = tablaCrudos.NewRow();
-							nuevaFila["ClaveMunicipio"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "CLAVE DEL MUNICIPIO", "MUNICIPIO", "CVEMUN");
-							nuevaFila["TipoPredio"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "TIPO DE PREDIO", "PREDIO", "TIPO");
+							nuevaFila["ClaveMunicipio"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClaveMunicipio");
+							nuevaFila["TipoPredio"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "TipoPredio");
 							nuevaFila["CuentaPredial"] = cuentaPredial;
 							nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
-							nuevaFila["ClasePago"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "CLASE DE PAGO", "CLASE");
-							nuevaFila["Bimestre"] = MapeadorInteligente.RastrearBimestres(fila, mapaColumnas);
-
-							string impuestoStr = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "SALDO", "TOTAL", "2026", "IMPUESTO", "IMPORTE", "PAGO");
-							nuevaFila["ImpuestoDeterminado"] = string.IsNullOrWhiteSpace(impuestoStr) ? "0" : impuestoStr;
-							nuevaFila["FechaVigencia"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "FECHA", "VIGENCIA", "DIA");
+							nuevaFila["ClasePago"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClasePago");
+							nuevaFila["Bimestre"] = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+							nuevaFila["ImpuestoDeterminado"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ImpuestoDeterminado");
+							nuevaFila["FechaVigencia"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "FechaVigencia");
 
 							tablaCrudos.Rows.Add(nuevaFila);
 						}
