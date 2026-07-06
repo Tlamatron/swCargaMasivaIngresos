@@ -145,6 +145,12 @@ namespace swCargaMasivaIngresos.Services
 				string cuenta = ExtraerValor(fila, mapaColumnas, "CUENTA", "PREDIAL", "CTA", "CTA.", "CLAVE");
 				if (string.IsNullOrWhiteSpace(cuenta) || cuenta.Equals("Cuenta", StringComparison.OrdinalIgnoreCase))
 					continue;
+				string anioPredial = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "AÑO", "EJERCICIO", "AÑO PREDIAL");
+				// Si la columna de Año existe, pero el valor NO es 2026, ignoramos a esta persona
+				if (!string.IsNullOrWhiteSpace(anioPredial) && !anioPredial.Contains("2026"))
+				{
+					continue;
+				}
 
 				// 3. Ensamblamos la fila limpia usando el extractor dinámico
 				DataRow nuevaFila = tablaEstandar.NewRow();
