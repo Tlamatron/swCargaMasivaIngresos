@@ -35,24 +35,36 @@ namespace swCargaMasivaIngresos.Services
 			}
 
 			// =========================================================================
-			// FASE 2: MAPEO INTELIGENTE (Busca columnas sin importar el orden)
+			// FASE 2: MAPEO INTELIGENTE Y RADAR MULTI-FILA
 			// =========================================================================
+			int filaEncabezadoReal = -1;
 
-			// 1. Asumimos que en archivos planos (CSV/TXT) los encabezados están en la primera fila (índice 0)
-			var mapaColumnas = MapeadorInteligente.ObtenerMapaColumnas(lectura.TablaCruda.Rows[0]);
+			// 1. RADAR: Escaneamos las primeras 50 filas buscando la palabra CUENTA
+			for (int i = 0; i < Math.Min(50, lectura.TablaCruda.Rows.Count); i++)
+			{
+				var filaTextos = lectura.TablaCruda.Rows[i].ItemArray.Select(x => x?.ToString().Trim().ToUpper() ?? "");
+				string textoFilaComplet = string.Join(" ", filaTextos);
 
-			// 2. Validamos de forma inteligente que sí haya detectado al menos la columna "Cuenta"
-			bool mapeoExitoso = mapaColumnas.Keys.Any(k => k.Contains("CUENTA") || k.Contains("PREDIAL") || k.Contains("CTA"));
+				if (textoFilaComplet.Contains("CUENTA") || textoFilaComplet.Contains("PREDIAL") || textoFilaComplet.Contains("CTA"))
+				{
+					filaEncabezadoReal = i;
+					break;
+				}
+			}
 
-			if (!mapeoExitoso)
+			// 2. Si no encontró los encabezados tras buscar, aborta suavemente.
+			if (filaEncabezadoReal == -1)
 			{
 				resultadoFinal.RegistrosFallidos = 1;
-				resultadoFinal.ErroresDetalle.Add("Error de Mapeo: No se encontraron los encabezados obligatorios (Ej. CUENTA PREDIAL) en la primera fila del archivo.");
+				resultadoFinal.ErroresDetalle.Add("Error de Mapeo: No se encontraron los encabezados obligatorios (Ej. CUENTA PREDIAL) en el archivo.");
 				return resultadoFinal;
 			}
 
-			// 3. Estandarizamos la tabla pasándole el mapa y diciéndole que los datos empiezan en la fila 1
-			DataTable tablaMapeada = MapeadorInteligente.EstandarizarTabla(lectura.TablaCruda, mapaColumnas, 1);
+			// 3. SÚPER-MAPA: Leemos el encabezado detectado y 2 filas hacia abajo
+			var mapaColumnas = MapeadorInteligente.ObtenerMapaColumnasMultiFila(lectura.TablaCruda, filaEncabezadoReal, 3);
+
+			// 4. Estandarizamos diciendo que los datos empiezan justo debajo del encabezado
+			DataTable tablaMapeada = MapeadorInteligente.EstandarizarTabla(lectura.TablaCruda, mapaColumnas, filaEncabezadoReal + 1);
 
 			// =========================================================================
 			// FASE 3: LIMPIEZA Y AUTOCORRECCIÓN (Aduana de Reglas de Negocio)

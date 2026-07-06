@@ -11,6 +11,7 @@ namespace swCargaMasivaIngresos.Services
 {
 	public class ProcesadorPadronExcel : IProcesadorFormato
 	{
+		// Usamos la misma forma de conexión original de tu proyecto
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
@@ -34,63 +35,64 @@ namespace swCargaMasivaIngresos.Services
 						string nombrePestaña = tablaExcel.TableName;
 						int filaEncabezadoReal = -1;
 
-						// 🚀 1. RADAR: Buscamos el inicio de la tabla
+						// 🚀 1. RADAR: Buscamos el inicio de la tabla (hasta 50 filas para saltar logos)
 						for (int i = 0; i < Math.Min(50, tablaExcel.Rows.Count); i++)
 						{
 							var filaTextos = tablaExcel.Rows[i].ItemArray.Select(x => x?.ToString().Trim().ToUpper() ?? "");
 							string textoFilaComplet = string.Join(" ", filaTextos);
 
-							if (textoFilaComplet.Contains("CUENTA") || textoFilaComplet.Contains("PREDIAL") || textoFilaComplet.Contains("CTA"))
+							// Agregamos "CTA" y "CONTRIBUYENTE" por si el municipio nombra así a la columna
+							if (textoFilaComplet.Contains("CUENTA") || textoFilaComplet.Contains("PREDIAL") || textoFilaComplet.Contains("CTA") || textoFilaComplet.Contains("CONTRIBUYENTE"))
 							{
 								filaEncabezadoReal = i;
 								break;
 							}
 						}
 
+						// Si no hay encabezados, es una pestaña de notas o vacía
 						if (filaEncabezadoReal == -1) continue;
 
+						// 🚀 2. CREAMOS LA ESTRUCTURA ORIGINAL Y SEGURA
 						DataTable tablaCrudos = CrearEstructuraPadron();
 
-						// 🚀 2. SÚPER-MAPA (Soporta archivos con y sin sub-cabeceras)
+						// 🚀 3. SÚPER-MAPA (Soporta archivos organizados o con sub-cabeceras como Ayotoxco)
 						var mapaColumnas = MapeadorInteligente.ObtenerMapaColumnasMultiFila(tablaExcel, filaEncabezadoReal, 3);
 
 						for (int i = filaEncabezadoReal + 1; i < tablaExcel.Rows.Count; i++)
 						{
 							var fila = tablaExcel.Rows[i];
 
+							// Condición de paro: Fila de sumatorias o completamente vacía
 							string textoInicioFila = string.Join(" ", fila.ItemArray.Take(3).Select(x => x?.ToString().ToUpper() ?? ""));
 							if (textoInicioFila.Contains("TOTAL") || string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) break;
 
 							string cuentaPredial = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "CUENTA", "PREDIAL", "CTA", "CTA.", "CLAVE");
+
+							// Ignoramos sub-encabezados que se colaron (ej. la palabra "Cuenta" repetida) o filas sin cuenta
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 
 							DataRow nuevaFila = tablaCrudos.NewRow();
 
-							// 🚀 OBLIGATORIOS (La Trinidad)
+							// 🚀 LA TRINIDAD OBLIGATORIA (Clave, Tipo y Cuenta)
 							nuevaFila["ClaveMunicipio"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "CLAVE DEL MUNICIPIO", "MUNICIPIO", "CVEMUN");
 							nuevaFila["TipoPredio"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "TIPO DE PREDIO", "PREDIO", "TIPO");
 							nuevaFila["CuentaPredial"] = cuentaPredial;
 							nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
 
-							// 🚀 OPCIONALES (Si no vienen en el Excel, se quedan vacíos pacíficamente)
-							nuevaFila["NombrePropietario"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "NOMBRE", "PROPIETARIO", "CONTRIBUYENTE");
-							nuevaFila["Calle"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "CALLE", "DIRECCION", "DOMICILIO");
-							nuevaFila["Colonia"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "COLONIA", "FRACCIONAMIENTO");
-							nuevaFila["Localidad"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "LOCALIDAD", "POBLACION");
-
-							string baseGravStr = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "BASE GRAVABLE", "BASE", "VALOR CATASTRAL");
-							nuevaFila["BaseGravable"] = string.IsNullOrWhiteSpace(baseGravStr) ? "0" : baseGravStr;
-
+							// 🚀 DATOS EXTRAÍDOS (Si no vienen, se quedan vacíos pacíficamente)
 							nuevaFila["ClasePago"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "CLASE DE PAGO", "CLASE");
 							nuevaFila["Bimestre"] = MapeadorInteligente.RastrearBimestres(fila, mapaColumnas);
 
-							string impuestoStr = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "SALDO", "TOTAL", "2026", "IMPUESTO", "IMPORTE");
+							// Si no pagó (porque es padrón puro) el impuesto será 0
+							string impuestoStr = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "SALDO", "TOTAL", "2026", "IMPUESTO", "IMPORTE", "PAGO");
 							nuevaFila["ImpuestoDeterminado"] = string.IsNullOrWhiteSpace(impuestoStr) ? "0" : impuestoStr;
+
+							nuevaFila["FechaVigencia"] = MapeadorInteligente.ExtraerValor(fila, mapaColumnas, "FECHA", "VIGENCIA", "DIA", "DÍA");
 
 							tablaCrudos.Rows.Add(nuevaFila);
 						}
 
-						// 🚀 3. LA ADUANA (El LimpiadorDatos sabrá que es Tipo 1 y NO borrará a los que tienen $0)
+						// 🚀 4. LA ADUANA (Al ser Tipo 1, el LimpiadorDatos sabrá que NO debe borrar los registros con $0)
 						var resultadoLimpieza = LimpiadorDatos.LimpiarYValidar(tablaCrudos, nombrePestaña, param);
 
 						if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
@@ -100,7 +102,9 @@ namespace swCargaMasivaIngresos.Services
 
 						resultadoFinal.RegistrosExitosos += resultadoLimpieza.TablaValidos.Rows.Count;
 						resultadoFinal.RegistrosFallidos += resultadoLimpieza.TablaRechazados.Rows.Count;
-						if (resultadoLimpieza.DetallesErrores != null) resultadoFinal.ErroresDetalle.AddRange(resultadoLimpieza.DetallesErrores);
+
+						if (resultadoLimpieza.DetallesErrores != null)
+							resultadoFinal.ErroresDetalle.AddRange(resultadoLimpieza.DetallesErrores);
 					}
 				}
 			}
@@ -113,26 +117,16 @@ namespace swCargaMasivaIngresos.Services
 			return resultadoFinal;
 		}
 
+		// ==============================================================================
+		// 🛡️ ESTRUCTURA SEGURA: Exactamente lo que espera el Limpiador y SQL Server
+		// ==============================================================================
 		private DataTable CrearEstructuraPadron()
 		{
-			// Transformamos a STRING para evitar fallos si el municipio escribe texto donde van números
+			// Todo en typeof(string) para que el "LimpiadorDatos" pueda procesar textos basura sin que C# explote
 			DataTable tabla = new DataTable();
 			tabla.Columns.Add("ClaveMunicipio", typeof(string));
 			tabla.Columns.Add("TipoPredio", typeof(string));
 			tabla.Columns.Add("CuentaPredial", typeof(string));
-			tabla.Columns.Add("NombrePropietario", typeof(string));
-			tabla.Columns.Add("Calle", typeof(string));
-			tabla.Columns.Add("NumInt", typeof(string));
-			tabla.Columns.Add("NumExt", typeof(string));
-			tabla.Columns.Add("Colonia", typeof(string));
-			tabla.Columns.Add("Localidad", typeof(string));
-			tabla.Columns.Add("NombrePropietario2", typeof(string));
-			tabla.Columns.Add("TipoPersona", typeof(string));
-			tabla.Columns.Add("RFC", typeof(string));
-			tabla.Columns.Add("ClaveRegimenSAT", typeof(string));
-			tabla.Columns.Add("ClaveUsoSAT", typeof(string));
-			tabla.Columns.Add("CPFiscalSAT", typeof(string));
-			tabla.Columns.Add("BaseGravable", typeof(string));
 			tabla.Columns.Add("ClasePago", typeof(string));
 			tabla.Columns.Add("Bimestre", typeof(string));
 			tabla.Columns.Add("ImpuestoDeterminado", typeof(string));
@@ -141,6 +135,9 @@ namespace swCargaMasivaIngresos.Services
 			return tabla;
 		}
 
+		// ==============================================================================
+		// 🛡️ INSERCIÓN BLINDADA
+		// ==============================================================================
 		private void InsertarBulkPadron(DataTable lote)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
@@ -149,15 +146,19 @@ namespace swCargaMasivaIngresos.Services
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
 					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Predial";
+					bulkCopy.BatchSize = 10000;
+					bulkCopy.BulkCopyTimeout = 120;
 
-					// Mapeamos automáticamente todas las columnas extraídas hacia SQL Server
-					foreach (DataColumn col in lote.Columns)
-					{
-						if (col.ColumnName != "MotivoRechazo")
-						{
-							bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
-						}
-					}
+					// 🚀 MAPEO EXPLÍCITO: Le decimos exactamente qué columnas enviar, ignorando "MotivoRechazo"
+					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
+					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
+					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
+					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
+					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
+					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
+					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
+					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
+
 					bulkCopy.WriteToServer(lote);
 				}
 			}
