@@ -4,9 +4,13 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
+using System.Linq;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Procesador de pagos universal que implementa la interfaz IProcesadorFormato. Este procesador realiza la lectura, mapeo, limpieza y validación de archivos de pagos, y luego inserta los datos válidos en la base de datos mediante una operación de inserción masiva.
+	/// </summary>
 	public class ProcesadorPagosUniversal : IProcesadorFormato
 	{
 		private readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
@@ -33,13 +37,22 @@ namespace swCargaMasivaIngresos.Services
 			// =========================================================================
 			// FASE 2: MAPEO INTELIGENTE (Busca columnas sin importar el orden)
 			// =========================================================================
-			DataTable tablaMapeada = MapeadorInteligente.EstandarizarTabla(lectura.TablaCruda, out List<string> erroresMapeo);
-			if (erroresMapeo.Count > 0)
+
+			// 1. Asumimos que en archivos planos (CSV/TXT) los encabezados están en la primera fila (índice 0)
+			var mapaColumnas = MapeadorInteligente.ObtenerMapaColumnas(lectura.TablaCruda.Rows[0]);
+
+			// 2. Validamos de forma inteligente que sí haya detectado al menos la columna "Cuenta"
+			bool mapeoExitoso = mapaColumnas.Keys.Any(k => k.Contains("CUENTA") || k.Contains("PREDIAL") || k.Contains("CTA"));
+
+			if (!mapeoExitoso)
 			{
 				resultadoFinal.RegistrosFallidos = 1;
-				resultadoFinal.ErroresDetalle.AddRange(erroresMapeo);
+				resultadoFinal.ErroresDetalle.Add("Error de Mapeo: No se encontraron los encabezados obligatorios (Ej. CUENTA PREDIAL) en la primera fila del archivo.");
 				return resultadoFinal;
 			}
+
+			// 3. Estandarizamos la tabla pasándole el mapa y diciéndole que los datos empiezan en la fila 1
+			DataTable tablaMapeada = MapeadorInteligente.EstandarizarTabla(lectura.TablaCruda, mapaColumnas, 1);
 
 			// =========================================================================
 			// FASE 3: LIMPIEZA Y AUTOCORRECCIÓN (Aduana de Reglas de Negocio)

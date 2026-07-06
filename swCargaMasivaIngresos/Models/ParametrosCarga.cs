@@ -42,5 +42,10 @@ namespace swCargaMasivaIngresos.Models
 		/// Correo electrónico al cual se enviarán las notificaciones relacionadas con el estado y resultado de la carga masiva. Este valor es esencial para mantener informados a los usuarios o administradores sobre el progreso, éxito o cualquier error que ocurra durante el proceso de carga. Es importante que este correo sea válido y esté monitoreado para asegurar una comunicación efectiva.
 		/// </summary>
 		public string CorreoNotificacion { get; set; }
+
+		/// <summary>
+		/// Clave del municipio de destino para el cual se está realizando la carga masiva. Este valor es crucial para segmentar y organizar los datos según la ubicación geográfica, así como para aplicar las reglas de negocio específicas de cada municipio durante el procesamiento de la carga. Es importante que este valor sea preciso y corresponda a un municipio válido para garantizar la integridad de los registros y facilitar el análisis posterior de los datos cargados.
+		/// </summary>
+		public int ClaveMunicipioDestino { get; set; }
 	}
 }

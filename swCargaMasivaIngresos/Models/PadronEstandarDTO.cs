@@ -15,6 +15,7 @@ namespace swCargaMasivaIngresos.Models
 		public string CuentaPredial { get; set; }
 		public decimal BaseGravable { get; set; }
 		public decimal ImpuestoDeterminado { get; set; }
-		// ... aquí puedes agregar todos los campos que necesites guardar ...
+		public int ClasePago { get; set; }
+		public int BimestresPagados { get; set; }
 	}
 }

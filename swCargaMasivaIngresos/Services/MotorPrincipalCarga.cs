@@ -20,51 +20,6 @@ namespace swCargaMasivaIngresos.Services
 
 
 
-		public static async Task EjecutarEnSegundoPlano(string rutaArchivo, string extension, ParametrosCarga parametros)
-		{
-			ResultadoProceso resultado = null;
-			string nombreOficina = $"OficinaId_{parametros.OficinaId}";
-
-			try
-			{
-				// 1. Avisamos a la BD que iniciamos el procesamiento
-				ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Procesando en Servidor");
-
-				IProcesadorFormato procesador = FabricaProcesadores.ObtenerProcesador(parametros.TipoCargaId, extension);
-				resultado = procesador.Procesar(rutaArchivo, parametros);
-
-				if (resultado.RegistrosFallidos > 0)
-				{
-					string extractoErrores = resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0
-						? string.Join(" | ", resultado.ErroresDetalle.Take(5))
-						: "Sin detalles específicos.";
-					await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"La carga terminó con {resultado.RegistrosFallidos} fallos y {resultado.RegistrosExitosos} exitosos.");
-				}
-
-				// 2. Avisamos a la BD que el proceso terminó bien, pasando los contadores
-				ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Procesado Correctamente", resultado.RegistrosExitosos, resultado.RegistrosFallidos);
-			}
-			catch (Exception ex)
-			{
-				resultado = new ResultadoProceso { RegistrosExitosos = 0, RegistrosFallidos = 1, ErroresDetalle = new System.Collections.Generic.List<string> { ex.Message } };
-
-				// 3. Avisamos a la BD que hubo un fallo catastrófico
-				ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Error Fatal", 0, 1, ex.Message);
-				await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "MotorPrincipalCarga", $"ERROR FATAL: {ex.Message}");
-				throw;
-			}
-			finally
-			{
-				if (File.Exists(rutaArchivo)) File.Delete(rutaArchivo);
-			}
-
-			if (!string.IsNullOrWhiteSpace(parametros.CorreoNotificacion))
-			{
-				await ServicioNotificacion.EnviarCorreoNotificacion(parametros, resultado, parametros.CorreoNotificacion);
-				// 4. Actualizamos estatus final post-correo
-				if (resultado.RegistrosFallidos == 0) ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Procesado y Notificado");
-			}
-		}
 
 		/// <summary>
 		/// Este es el método que Hangfire ejecutará de forma aislada e ininterrumpible
@@ -73,60 +28,173 @@ namespace swCargaMasivaIngresos.Services
 		/// <param name="extension"></param>
 		/// <param name="parametros"></param>
 		/// <returns></returns>
-		public static async Task EjecutarEnSegundoPlano_v01(string rutaArchivo, string extension, ParametrosCarga parametros)
+		public static async Task EjecutarEnSegundoPlano(string rutaArchivo, string extension, ParametrosCarga parametros)
 		{
 			ResultadoProceso resultado = null;
-			string nombreOficina = $"OficinaId_{parametros.OficinaId}"; // Esto puede venir de tu BD después
+			bool ocurrioErrorFatal = false;
+			string mensajeErrorFatal = "";
 
-			try 
+			try
 			{
-				// 1. Obtenemos el motor correcto sin importar si es TXT, Excel o JSON en el futuro
+				ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Procesando en Servidor");
+
 				IProcesadorFormato procesador = FabricaProcesadores.ObtenerProcesador(parametros.TipoCargaId, extension);
-				// 2. Ejecutamos el procesamiento pesado
 				resultado = procesador.Procesar(rutaArchivo, parametros);
-				// --- INTEGRACIÓN DE LOG DE RESUMEN / ADVERTENCIAS ---
+
+				// 🚀 1. DETECCIÓN DE ARCHIVO "FANTASMA"
+				// Si leyó el archivo pero no sacó nada, forzamos un error para notificar al usuario.
+				if (resultado.RegistrosExitosos == 0 && resultado.RegistrosFallidos == 0)
+				{
+					throw new Exception("El archivo fue escaneado, pero no se encontró información válida (Ej. Encabezados no detectados o archivo vacío).");
+				}
+
 				if (resultado.RegistrosFallidos > 0)
 				{
-					await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] La carga de la {nombreOficina} terminó con {resultado.RegistrosFallidos} registros fallidos por layout y {resultado.RegistrosExitosos} exitosos.");
+					await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"La carga terminó con {resultado.RegistrosFallidos} fallos y {resultado.RegistrosExitosos} exitosos.");
 				}
-				else
-				{
-					await LogService.WriteLogAsync("INFO", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] Carga masiva de la {nombreOficina} finalizada. {resultado.RegistrosExitosos} registros insertados correctamente.");
-				}
+
+				ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Procesado Correctamente", resultado.RegistrosExitosos, resultado.RegistrosFallidos);
 			}
 			catch (Exception ex)
 			{
-				// Si el archivo estaba corrupto a nivel sistema, lo capturamos
+				ocurrioErrorFatal = true;
+				mensajeErrorFatal = ex.Message;
+
+				// 🚀 2. CREAMOS EL RESULTADO DE ERROR FATAL PARA EL CORREO
 				resultado = new ResultadoProceso
 				{
 					RegistrosExitosos = 0,
 					RegistrosFallidos = 1,
-					ErroresDetalle = new System.Collections.Generic.List<string> { "Error fatal al leer el archivo: " + ex.Message }
+					ErroresDetalle = new System.Collections.Generic.List<string> { $"Error Crítico: {ex.Message}" }
 				};
 
-				await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] ERROR FATAL: {ex.Message}. Traza: {ex.StackTrace}");
+				ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Error Fatal", 0, 1, ex.Message);
+				await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "MotorPrincipalCarga", $"ERROR FATAL: {ex.Message}");
 			}
-		
 			finally
 			{
-				// 3. BUENA PRÁCTICA: Borrar el archivo TXT de 500MB del servidor una vez insertado en SQL
-				if (File.Exists(rutaArchivo))
-				{
-					File.Delete(rutaArchivo);
-				}
+				if (File.Exists(rutaArchivo)) File.Delete(rutaArchivo);
 			}
 
-			// 4. Enviar el correo al usuario con su resumen
-			// --- INTEGRACIÓN CORRECTA DE NOTIFICACIÓN ---
-			// Validamos que el correo exista, y se lo pasamos como 3er parámetro
+			// 🚀 3. EL CORREO AHORA SIEMPRE SE ENVÍA (Incluso si explotó el catch)
 			if (!string.IsNullOrWhiteSpace(parametros.CorreoNotificacion))
 			{
 				await ServicioNotificacion.EnviarCorreoNotificacion(parametros, resultado, parametros.CorreoNotificacion);
+
+				if (!ocurrioErrorFatal && resultado.RegistrosFallidos == 0)
+				{
+					ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Procesado y Notificado");
+				}
 			}
-			else
+
+			// 🚀 4. AHORA SÍ, LE AVISAMOS A HANGFIRE QUE EL TRABAJO FALLÓ (Para su panel de control)
+			if (ocurrioErrorFatal)
 			{
-				await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] No se envió correo porque no se proporcionó una dirección válida.");
+				throw new Exception(mensajeErrorFatal);
 			}
 		}
+
+		//public static async Task EjecutarEnSegundoPlano_V02(string rutaArchivo, string extension, ParametrosCarga parametros)
+		//{
+		//	ResultadoProceso resultado = null;
+		//	string nombreOficina = $"OficinaId_{parametros.OficinaId}";
+
+		//	try
+		//	{
+		//		// 1. Avisamos a la BD que iniciamos el procesamiento
+		//		ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Procesando en Servidor");
+
+		//		IProcesadorFormato procesador = FabricaProcesadores.ObtenerProcesador(parametros.TipoCargaId, extension);
+		//		resultado = procesador.Procesar(rutaArchivo, parametros);
+
+		//		if (resultado.RegistrosFallidos > 0)
+		//		{
+		//			string extractoErrores = resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0
+		//				? string.Join(" | ", resultado.ErroresDetalle.Take(5))
+		//				: "Sin detalles específicos.";
+		//			await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"La carga terminó con {resultado.RegistrosFallidos} fallos y {resultado.RegistrosExitosos} exitosos.");
+		//		}
+
+		//		// 2. Avisamos a la BD que el proceso terminó bien, pasando los contadores
+		//		ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Procesado Correctamente", resultado.RegistrosExitosos, resultado.RegistrosFallidos);
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		resultado = new ResultadoProceso { RegistrosExitosos = 0, RegistrosFallidos = 1, ErroresDetalle = new System.Collections.Generic.List<string> { ex.Message } };
+
+		//		// 3. Avisamos a la BD que hubo un fallo catastrófico
+		//		ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Error Fatal", 0, 1, ex.Message);
+		//		await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "MotorPrincipalCarga", $"ERROR FATAL: {ex.Message}");
+		//		throw;
+		//	}
+		//	finally
+		//	{
+		//		if (File.Exists(rutaArchivo)) File.Delete(rutaArchivo);
+		//	}
+
+		//	if (!string.IsNullOrWhiteSpace(parametros.CorreoNotificacion))
+		//	{
+		//		await ServicioNotificacion.EnviarCorreoNotificacion(parametros, resultado, parametros.CorreoNotificacion);
+		//		// 4. Actualizamos estatus final post-correo
+		//		if (resultado.RegistrosFallidos == 0) ControlCargasService.ActualizarEstatus(parametros.FolioCarga, "Procesado y Notificado");
+		//	}
+		//}
+
+		//public static async Task EjecutarEnSegundoPlano_v01(string rutaArchivo, string extension, ParametrosCarga parametros)
+		//{
+		//	ResultadoProceso resultado = null;
+		//	string nombreOficina = $"OficinaId_{parametros.OficinaId}"; // Esto puede venir de tu BD después
+
+		//	try 
+		//	{
+		//		// 1. Obtenemos el motor correcto sin importar si es TXT, Excel o JSON en el futuro
+		//		IProcesadorFormato procesador = FabricaProcesadores.ObtenerProcesador(parametros.TipoCargaId, extension);
+		//		// 2. Ejecutamos el procesamiento pesado
+		//		resultado = procesador.Procesar(rutaArchivo, parametros);
+		//		// --- INTEGRACIÓN DE LOG DE RESUMEN / ADVERTENCIAS ---
+		//		if (resultado.RegistrosFallidos > 0)
+		//		{
+		//			await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] La carga de la {nombreOficina} terminó con {resultado.RegistrosFallidos} registros fallidos por layout y {resultado.RegistrosExitosos} exitosos.");
+		//		}
+		//		else
+		//		{
+		//			await LogService.WriteLogAsync("INFO", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] Carga masiva de la {nombreOficina} finalizada. {resultado.RegistrosExitosos} registros insertados correctamente.");
+		//		}
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		// Si el archivo estaba corrupto a nivel sistema, lo capturamos
+		//		resultado = new ResultadoProceso
+		//		{
+		//			RegistrosExitosos = 0,
+		//			RegistrosFallidos = 1,
+		//			ErroresDetalle = new System.Collections.Generic.List<string> { "Error fatal al leer el archivo: " + ex.Message }
+		//		};
+
+		//		await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] ERROR FATAL: {ex.Message}. Traza: {ex.StackTrace}");
+		//	}
+		
+		//	finally
+		//	{
+		//		// 3. BUENA PRÁCTICA: Borrar el archivo TXT de 500MB del servidor una vez insertado en SQL
+		//		if (File.Exists(rutaArchivo))
+		//		{
+		//			File.Delete(rutaArchivo);
+		//		}
+		//	}
+
+		//	// 4. Enviar el correo al usuario con su resumen
+		//	// --- INTEGRACIÓN CORRECTA DE NOTIFICACIÓN ---
+		//	// Validamos que el correo exista, y se lo pasamos como 3er parámetro
+		//	if (!string.IsNullOrWhiteSpace(parametros.CorreoNotificacion))
+		//	{
+		//		await ServicioNotificacion.EnviarCorreoNotificacion(parametros, resultado, parametros.CorreoNotificacion);
+		//	}
+		//	else
+		//	{
+		//		await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "MotorPrincipalCarga", $"[Folio: {parametros.FolioCarga}] No se envió correo porque no se proporcionó una dirección válida.");
+		//	}
+		//}
+	
 	}
 }

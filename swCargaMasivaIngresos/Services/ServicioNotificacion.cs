@@ -59,53 +59,65 @@ namespace swCargaMasivaIngresos.Services
 						sbBody.AppendLine($"<p>Estimado usuario de la oficina <b>{parametros.OficinaId}</b>,</p>");
 						sbBody.AppendLine($"<p>Le notificamos que el proceso de su archivo (Folio: <b>{parametros.FolioCarga}</b>) ha finalizado.</p>");
 
-						sbBody.AppendLine("<h3>Resumen:</h3>");
-						sbBody.AppendLine("<ul>");
-						sbBody.AppendLine($"<li><b>Registros insertados exitosamente:</b> <span style='color:green'>{resultado.RegistrosExitosos}</span></li>");
-						sbBody.AppendLine($"<li><b>Registros rechazados (Error de formato):</b> <span style='color:red'>{resultado.RegistrosFallidos}</span></li>");
-						sbBody.AppendLine("</ul>");
+						// =========================================================================
+						// 🚀 DETECCIÓN VISUAL DE ERROR FATAL
+						// =========================================================================
+						bool esErrorFatal = resultado.RegistrosExitosos == 0 && resultado.TablaRechazados == null && resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0;
 
-						// =========================================================================
-						// 🚀 NUEVA LÓGICA DE EXPORTACIÓN A CSV (Soporta Tabla Completa o Lista Simple)
-						// =========================================================================
-						if (resultado.RegistrosFallidos > 0)
+						if (esErrorFatal)
 						{
-							sbBody.AppendLine("<h3>Detalle de Errores Encontrados:</h3>");
-							sbBody.AppendLine("<p>Se ha adjuntado un archivo CSV a este correo con el detalle completo de las filas rechazadas para su corrección.</p>");
+							sbBody.AppendLine($"<div style='background-color:#ffe6e6; border-left: 6px solid #cc0000; padding: 15px; margin: 20px 0;'>");
+							sbBody.AppendLine($"<h3 style='color:#cc0000; margin-top: 0;'>⚠️ No se pudo procesar el archivo</h3>");
+							sbBody.AppendLine($"<p>El sistema abortó la lectura del archivo porque no contiene el formato esperado, está vacío o le faltan los encabezados obligatorios (Cuenta Predial, Bimestre, etc.).</p>");
+							sbBody.AppendLine($"<p><b>Detalle técnico:</b> <i>{resultado.ErroresDetalle.FirstOrDefault()}</i></p>");
+							sbBody.AppendLine($"</div>");
+							sbBody.AppendLine($"<p>Por favor, corrija el archivo fuente e intente cargarlo nuevamente.</p>");
+						}
+						else
+						{
+							// EL FLUJO NORMAL (Si sí leyó el archivo)
+							sbBody.AppendLine("<h3>Resumen:</h3>");
+							sbBody.AppendLine("<ul>");
+							sbBody.AppendLine($"<li><b>Registros insertados exitosamente:</b> <span style='color:green'>{resultado.RegistrosExitosos}</span></li>");
+							sbBody.AppendLine($"<li><b>Registros rechazados (Error de formato):</b> <span style='color:red'>{resultado.RegistrosFallidos}</span></li>");
+							sbBody.AppendLine("</ul>");
 
-							StringBuilder csvContent = new StringBuilder();
-
-							// ESCENARIO A: El nuevo motor devolvió la tabla completa de rechazados
-							if (resultado.TablaRechazados != null && resultado.TablaRechazados.Rows.Count > 0)
+							// LÓGICA DE EXPORTACIÓN A CSV (Tu código original intacto)
+							if (resultado.RegistrosFallidos > 0)
 							{
-								// 1. Imprimir Encabezados
-								var nombresColumnas = resultado.TablaRechazados.Columns.Cast<DataColumn>().Select(c => LimpiarParaCsv(c.ColumnName));
-								csvContent.AppendLine(string.Join(",", nombresColumnas));
+								sbBody.AppendLine("<h3>Detalle de Errores Encontrados:</h3>");
+								sbBody.AppendLine("<p>Se ha adjuntado un archivo CSV a este correo con el detalle completo de las filas rechazadas para su corrección.</p>");
 
-								// 2. Imprimir Filas
-								foreach (DataRow fila in resultado.TablaRechazados.Rows)
+								StringBuilder csvContent = new StringBuilder();
+
+								if (resultado.TablaRechazados != null && resultado.TablaRechazados.Rows.Count > 0)
 								{
-									var valoresFila = fila.ItemArray.Select(v => LimpiarParaCsv(v?.ToString()));
-									csvContent.AppendLine(string.Join(",", valoresFila));
-								}
-							}
-							// ESCENARIO B: Compatibilidad con los procesadores antiguos (Padrón y Reducciones)
-							else if (resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0)
-							{
-								csvContent.AppendLine("No. Error,Detalle del Error");
-								int contador = 1;
-								foreach (var error in resultado.ErroresDetalle)
-								{
-									csvContent.AppendLine($"{contador},{LimpiarParaCsv(error)}");
-									contador++;
-								}
-							}
+									var nombresColumnas = resultado.TablaRechazados.Columns.Cast<DataColumn>().Select(c => LimpiarParaCsv(c.ColumnName));
+									csvContent.AppendLine(string.Join(",", nombresColumnas));
 
-							if (csvContent.Length > 0)
-							{
-								byte[] buffer = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csvContent.ToString())).ToArray();
-								MemoryStream ms = new MemoryStream(buffer);
-								mensaje.Attachments.Add(new Attachment(ms, $"Errores_Carga_{parametros.FolioCarga}.csv", "text/csv"));
+									foreach (DataRow fila in resultado.TablaRechazados.Rows)
+									{
+										var valoresFila = fila.ItemArray.Select(v => LimpiarParaCsv(v?.ToString()));
+										csvContent.AppendLine(string.Join(",", valoresFila));
+									}
+								}
+								else if (resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0)
+								{
+									csvContent.AppendLine("No. Error,Detalle del Error");
+									int contador = 1;
+									foreach (var error in resultado.ErroresDetalle)
+									{
+										csvContent.AppendLine($"{contador},{LimpiarParaCsv(error)}");
+										contador++;
+									}
+								}
+
+								if (csvContent.Length > 0)
+								{
+									byte[] buffer = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csvContent.ToString())).ToArray();
+									MemoryStream ms = new MemoryStream(buffer);
+									mensaje.Attachments.Add(new Attachment(ms, $"Errores_Carga_{parametros.FolioCarga}.csv", "text/csv"));
+								}
 							}
 						}
 

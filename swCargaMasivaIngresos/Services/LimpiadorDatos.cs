@@ -6,16 +6,52 @@ using System.Linq;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Contiene los resultados de la limpieza y validación de datos, incluyendo las filas válidas, las filas rechazadas con motivos, los detalles de errores y el conteo de registros ignorados.
+	/// </summary>
 	public class ResultadoLimpieza
 	{
+		/// <summary>
+		/// Tabla que contiene las filas válidas después de la limpieza y validación.
+		/// </summary>
 		public DataTable TablaValidos { get; set; }
+		/// <summary>
+		/// Tabla que contiene las filas rechazadas después de la limpieza y validación, junto con los motivos de rechazo.
+		/// </summary>
 		public DataTable TablaRechazados { get; set; }
+		/// <summary>
+		/// Detalles de errores encontrados durante la limpieza y validación, incluyendo el número de fila y la descripción del error.|
+		/// </summary>
 		public List<string> DetallesErrores { get; set; } = new List<string>();
-		public int RegistrosIgnorados { get; set; } // Para los pagos históricos que simplemente saltamos
+		/// <summary>
+		/// Registro de la cantidad de filas que fueron ignoradas durante el proceso de limpieza y validación, por ejemplo, debido a filtros de basura histórica.
+		/// </summary>
+		public int RegistrosIgnorados { get; set; }
 	}
 
+	/// <summary>
+	/// Limpia y valida los datos de la tabla mapeada según las reglas de negocio definidas, devolviendo un objeto ResultadoLimpieza con los resultados del proceso.
+	/// </summary>
 	public static class LimpiadorDatos
 	{
+		/// <summary>
+		/// Limpia un número de cuenta predial cruda, eliminando cualquier carácter que no sea un dígito. Esto asegura que la cuenta predial esté en un formato estandarizado para su posterior procesamiento.
+		/// </summary>
+		/// <param name="cuentaCruda"></param>
+		/// <returns></returns>
+		public static string LimpiarCuenta(string cuentaCruda)
+		{
+			if (string.IsNullOrWhiteSpace(cuentaCruda)) return string.Empty;
+			return new string(cuentaCruda.Where(char.IsDigit).ToArray());
+		}
+
+		/// <summary>
+		/// Limpia y valida los datos de la tabla mapeada según las reglas de negocio definidas, devolviendo un objeto ResultadoLimpieza con las filas válidas, las filas rechazadas con motivos, los detalles de errores y el conteo de registros ignorados.
+		/// </summary>
+		/// <param name="tablaMapeada"></param>
+		/// <param name="contextoPestaña"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public static ResultadoLimpieza LimpiarYValidar(DataTable tablaMapeada, string contextoPestaña, ParametrosCarga param)
 		{
 			var resultado = new ResultadoLimpieza
@@ -24,7 +60,6 @@ namespace swCargaMasivaIngresos.Services
 				TablaRechazados = tablaMapeada.Clone()
 			};
 
-			// Agregamos una columna extra a los rechazados para saber por qué fallaron
 			resultado.TablaRechazados.Columns.Add("MotivoRechazo", typeof(string));
 
 			int numeroFila = 0;
@@ -34,7 +69,6 @@ namespace swCargaMasivaIngresos.Services
 				numeroFila++;
 				List<string> erroresFila = new List<string>();
 
-				// 1. Extraemos los valores crudos
 				string claveMun = fila["ClaveMunicipio"]?.ToString().Trim();
 				string tipoPre = fila["TipoPredio"]?.ToString().Trim();
 				string cuenta = fila["CuentaPredial"]?.ToString().Trim();
@@ -43,70 +77,99 @@ namespace swCargaMasivaIngresos.Services
 				string impuestoStr = fila["ImpuestoDeterminado"]?.ToString().Trim();
 				string fechaStr = fila["FechaVigencia"]?.ToString().Trim();
 
-				// =================================================================================
-				// 🚀 REGLAS DE NEGOCIO Y AUTOCORRECCIÓN
-				// =================================================================================
-
-				// REGLA A: Filtro de "Basura Histórica" (Si es archivo de pagos y no trae pago 2026, ignorar)
+				// =======================================================================
+				// 🚀 REGLA A: Filtro de Basura Histórica (Pagos en ceros)
+				// =======================================================================
 				if (param.TipoCargaId == 2)
 				{
 					if (string.IsNullOrWhiteSpace(impuestoStr) || impuestoStr == "0" || impuestoStr == "0.00" || impuestoStr == "-")
 					{
 						resultado.RegistrosIgnorados++;
-						continue; // Saltamos la fila, ni siquiera es un error, es basura histórica
+						continue;
 					}
 				}
 
-				// REGLA B: Limpieza de Cuenta Predial y Tipo de Predio (Ej. "U-2270" o "1-2270")
+				// =======================================================================
+				// 🚀 REGLA B: Limpieza Estricta de Cuenta Predial y Predio
+				// =======================================================================
 				if (!string.IsNullOrWhiteSpace(cuenta) && (cuenta.Contains("-") || cuenta.StartsWith("U") || cuenta.StartsWith("R") || cuenta.StartsWith("S")))
 				{
-					if (cuenta.StartsWith("U", StringComparison.OrdinalIgnoreCase) || cuenta.StartsWith("1-")) { tipoPre = "1"; }
-					else if (cuenta.StartsWith("R", StringComparison.OrdinalIgnoreCase) || cuenta.StartsWith("2-")) { tipoPre = "2"; }
-					else if (cuenta.StartsWith("S", StringComparison.OrdinalIgnoreCase) || cuenta.StartsWith("3-")) { tipoPre = "3"; }
+					if (cuenta.StartsWith("U", StringComparison.OrdinalIgnoreCase) || cuenta.StartsWith("1-")) tipoPre = "1";
+					else if (cuenta.StartsWith("R", StringComparison.OrdinalIgnoreCase) || cuenta.StartsWith("2-")) tipoPre = "2";
+					else if (cuenta.StartsWith("S", StringComparison.OrdinalIgnoreCase) || cuenta.StartsWith("3-")) tipoPre = "3";
 
-					// Extraemos solo los números de la cuenta predial
-					cuenta = new string(cuenta.Where(char.IsDigit).ToArray());
+					cuenta = LimpiarCuenta(cuenta);
 				}
 
-				// Si el Tipo de Predio viene como U, R, S en su propia columna, lo corregimos a número
-				if (tipoPre.Equals("U", StringComparison.OrdinalIgnoreCase)) tipoPre = "1";
-				if (tipoPre.Equals("R", StringComparison.OrdinalIgnoreCase)) tipoPre = "2";
-				if (tipoPre.Equals("S", StringComparison.OrdinalIgnoreCase)) tipoPre = "3";
+				if (tipoPre?.Equals("U", StringComparison.OrdinalIgnoreCase) == true) tipoPre = "1";
+				if (tipoPre?.Equals("R", StringComparison.OrdinalIgnoreCase) == true) tipoPre = "2";
+				if (tipoPre?.Equals("S", StringComparison.OrdinalIgnoreCase) == true) tipoPre = "3";
 
-				// REGLA C: Inferencia de Fechas y Bimestres por el nombre de la Pestaña
-				if (string.IsNullOrWhiteSpace(fechaStr) && !string.IsNullOrWhiteSpace(contextoPestaña))
+				// =======================================================================
+				// 🚀 REGLA C: Motor de Inferencia por Pestaña (Ayotoxco y Otros)
+				// =======================================================================
+				if (!string.IsNullOrWhiteSpace(contextoPestaña))
 				{
-					if (contextoPestaña.Contains("ENERO"))
+					string pestañaMayus = contextoPestaña.ToUpper();
+
+					if (string.IsNullOrWhiteSpace(fechaStr))
 					{
-						fechaStr = "02/01/2026"; // 2 de enero (Primer día hábil)
-						if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "1"; // Anual
-						if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "0";
+						if (pestañaMayus.Contains("ENERO")) fechaStr = "02/01/2026";
+						else if (pestañaMayus.Contains("FEBRERO")) fechaStr = "03/02/2026";
+						else if (pestañaMayus.Contains("MARZO")) fechaStr = "02/03/2026";
+						else if (pestañaMayus.Contains("ABRIL")) fechaStr = "01/04/2026";
+						else if (pestañaMayus.Contains("MAYO")) fechaStr = "04/05/2026";
+						else if (pestañaMayus.Contains("JUNIO")) fechaStr = "01/06/2026";
 					}
-					// Aquí puedes agregar más meses (Febrero, Marzo, etc.)
+
+					if (string.IsNullOrWhiteSpace(clasePago))
+					{
+						if (pestañaMayus.Contains("ANUAL") || pestañaMayus.Contains("ENERO") || pestañaMayus.Contains("FEBRERO"))
+							clasePago = "1";
+						else if (pestañaMayus.Contains("BIMESTRAL") || pestañaMayus.Contains("BIMESTRE") || pestañaMayus.Contains("-BIM") || pestañaMayus.Contains(" BIM"))
+							clasePago = "2";
+					}
+
+					if (string.IsNullOrWhiteSpace(tipoPre))
+					{
+						if (pestañaMayus.Contains("SUB-URBANO") || pestañaMayus.Contains("SUBURBANO") || pestañaMayus.Contains("SUB")) tipoPre = "3";
+						else if (pestañaMayus.Contains("URBANO")) tipoPre = "1";
+						else if (pestañaMayus.Contains("RUSTICO") || pestañaMayus.Contains("RÚSTICO")) tipoPre = "2";
+					}
 				}
 
-				// REGLA D: Clave de Municipio (Fallback inteligente)
-				// Si viene vacío o trae texto en lugar de número, usamos la OficinaId que seleccionó el usuario
+				// =======================================================================
+				// 🚀 REGLA D: Fallback Seguro de Municipio (Prevención Error 500)
+				// =======================================================================
 				if (string.IsNullOrWhiteSpace(claveMun) || !short.TryParse(claveMun, out _))
 				{
-					// Si el admin seleccionó el municipio en la interfaz, lo usamos para salvar el registro
-					claveMun = param.OficinaId.ToString();
+					if (param.ClaveMunicipioDestino > 0) claveMun = param.ClaveMunicipioDestino.ToString();
 				}
 
-				// =================================================================================
-				// 🛑 VALIDACIONES FINALES (Si después de autocorregir siguen mal, se rechazan)
-				// =================================================================================
+				// =======================================================================
+				// 🚀 REGLA E: Blindaje Contable de Bimestres
+				// =======================================================================
+				if (!string.IsNullOrWhiteSpace(bimestre) && bimestre.Contains(","))
+				{
+					bimestre = bimestre.Split(',').Last().Trim(); // "1,2,3" -> "3"
+				}
+				if (clasePago == "1" || string.IsNullOrWhiteSpace(bimestre))
+				{
+					bimestre = "0"; // Regla SQL: Si es Anual, el bimestre es 0
+				}
 
+				// =======================================================================
+				// 🛑 ADUANA FINAL DE VALIDACIÓN
+				// =======================================================================
 				if (string.IsNullOrWhiteSpace(cuenta)) erroresFila.Add("No se pudo identificar un número de cuenta predial válido.");
 				if (!short.TryParse(claveMun, out short numMun) || numMun < 1 || numMun > 217) erroresFila.Add($"Clave de municipio '{claveMun}' inválida.");
 				if (!byte.TryParse(tipoPre, out byte numPre) || numPre < 1 || numPre > 3) erroresFila.Add($"Tipo de predio '{tipoPre}' inválido (1=Urbano, 2=Rústico, 3=Suburbano).");
 
-				// =================================================================================
-				// 🚦 DISTRIBUCIÓN DE CARRILES
-				// =================================================================================
+				// =======================================================================
+				// 🚦 DISTRIBUCIÓN A TABLAS DE SALIDA
+				// =======================================================================
 				if (erroresFila.Count > 0)
 				{
-					// CARRIL ROJO (Rechazados)
 					DataRow filaError = resultado.TablaRechazados.NewRow();
 					filaError.ItemArray = fila.ItemArray.Clone() as object[];
 					filaError["MotivoRechazo"] = string.Join(" | ", erroresFila);
@@ -116,15 +179,13 @@ namespace swCargaMasivaIngresos.Services
 				}
 				else
 				{
-					// CARRIL VERDE (Aceptados)
-					// Reescribimos los valores en la fila para que SQL reciba los datos ya corregidos (limpios)
 					fila["ClaveMunicipio"] = claveMun;
 					fila["TipoPredio"] = tipoPre;
 					fila["CuentaPredial"] = cuenta;
 					fila["ClasePago"] = clasePago;
 					fila["Bimestre"] = bimestre;
 					fila["FechaVigencia"] = fechaStr;
-					fila["FolioCarga"] = param.FolioCarga.ToString(); // Inyectamos el control
+					fila["FolioCarga"] = param.FolioCarga.ToString();
 
 					resultado.TablaValidos.ImportRow(fila);
 				}

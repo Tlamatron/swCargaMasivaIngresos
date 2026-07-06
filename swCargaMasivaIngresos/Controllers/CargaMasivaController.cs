@@ -59,7 +59,11 @@ namespace swCargaMasivaIngresos.Controllers
 				// Extraemos la oficina real y el nuevo municipio destino
 				int oficinaIdReal = Convert.ToInt32(httpRequest.Form["oficinaId"]);
 				int claveMunicipioDestino = 0;
-				int.TryParse(httpRequest.Form["claveMunicipioDestino"], out claveMunicipioDestino);
+				//int.TryParse(httpRequest.Form["claveMunicipioDestino"], out claveMunicipioDestino);
+				if (httpRequest.Form["claveMunicipioDestino"] != null)
+				{
+					int.TryParse(httpRequest.Form["claveMunicipioDestino"], out claveMunicipioDestino);
+				}
 
 				// Si el folio es 0, significa que es el primer chunk
 				if (folioCarga == 0)
@@ -88,7 +92,8 @@ namespace swCargaMasivaIngresos.Controllers
 						UsuarioLogin = usuarioLogin,
 						OficinaId = Convert.ToInt32(httpRequest.Form["oficinaId"]),
 						TipoCargaId = tipoCargaId,
-						CorreoNotificacion = httpRequest.Form["correoNotificacion"]
+						CorreoNotificacion = httpRequest.Form["correoNotificacion"],
+						ClaveMunicipioDestino = claveMunicipioDestino
 					};
 
 					string rutaArchivoCompleto = ServicioEnsamblador.UnirFragmentos(folioCarga, nombreArchivoOriginal, totalChunks, RutaDirectorio);
