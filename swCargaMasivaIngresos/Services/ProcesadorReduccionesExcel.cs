@@ -19,7 +19,7 @@ namespace swCargaMasivaIngresos.Services
 			DataTable tablaLote = CrearEstructuraReducciones();
 			HashSet<string> reduccionesProcesadas = new HashSet<string>();
 
-			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorReduccionesExcel", $"Inicia lectura de archivo Excel de Descuentos. Folio: {param.FolioCarga}");
+			LogService.WriteLogAsync("WARN", param.UsuarioLogin, "ProcesadorReduccionesExcel", $"Inicia lectura de archivo Excel de Descuentos. Folio: {param.FolioCarga}");
 
 			using (var stream = File.Open(rutaArchivo, FileMode.Open, FileAccess.Read))
 			using (var reader = ExcelReaderFactory.CreateReader(stream))

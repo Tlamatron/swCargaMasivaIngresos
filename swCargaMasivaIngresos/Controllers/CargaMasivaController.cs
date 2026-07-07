@@ -98,10 +98,10 @@ namespace swCargaMasivaIngresos.Controllers
 
 					string rutaArchivoCompleto = ServicioEnsamblador.UnirFragmentos(folioCarga, nombreArchivoOriginal, totalChunks, RutaDirectorio);
 					string extension = Path.GetExtension(nombreArchivoOriginal);
-
+					await LogService.WriteLogAsync("WARN", usuarioLogin, "CargaMasivaController", $"El archivo es {nombreArchivoOriginal} con extensión:{extension}");
 					BackgroundJob.Enqueue(() => MotorPrincipalCarga.EjecutarEnSegundoPlano(rutaArchivoCompleto, extension, parametros));
 
-					await LogService.WriteLogAsync("INFO", usuarioLogin, "CargaMasivaController", $"Archivo ensamblado. Tarea encolada. Folio: {folioCarga}");
+					await LogService.WriteLogAsync("WARN", usuarioLogin, "CargaMasivaController", $"Archivo ensamblado. Tarea encolada. Folio: {folioCarga}");
 					ControlCargasService.ActualizarEstatus(folioCarga, "Encolado en Hangfire");
 				}
 

@@ -17,7 +17,7 @@ namespace swCargaMasivaIngresos.Services
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 
-			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronExcel", $"Iniciando escaneo multi-pestaña para Padrón. Folio: {param.FolioCarga}").Wait();
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronExcel", $"Iniciando Lectura por Regiones. Folio: {param.FolioCarga}").Wait();
 
 			try
 			{
@@ -33,7 +33,7 @@ namespace swCargaMasivaIngresos.Services
 					{
 						string nombrePestaña = tablaExcel.TableName;
 
-						// 🚀 1. LECTURA POR REGIONES
+						// 🚀 1. LECTURA POR REGIONES DIRECTA
 						int filaInicioDatos;
 						var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(tablaExcel, out filaInicioDatos);
 
@@ -42,7 +42,7 @@ namespace swCargaMasivaIngresos.Services
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraPadron();
 
-						// 🚀 2. EXTRACCIÓN A PARTIR DE LOS DATOS REALES
+						// 🚀 2. EXTRACCIÓN
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
 							var fila = tablaExcel.Rows[i];
@@ -56,7 +56,7 @@ namespace swCargaMasivaIngresos.Services
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 
 							string anioPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio");
-							if (!string.IsNullOrWhiteSpace(anioPredial) && !anioPredial.Contains("2026")) continue;
+							if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
 
 							DataRow nuevaFila = tablaCrudos.NewRow();
 							nuevaFila["ClaveMunicipio"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClaveMunicipio");

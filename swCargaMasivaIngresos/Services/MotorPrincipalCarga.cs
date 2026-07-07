@@ -18,9 +18,6 @@ namespace swCargaMasivaIngresos.Services
 	{
 		private static readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
 
-
-
-
 		/// <summary>
 		/// Este es el método que Hangfire ejecutará de forma aislada e ininterrumpible
 		/// </summary>

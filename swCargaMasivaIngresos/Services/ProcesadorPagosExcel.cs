@@ -17,8 +17,8 @@ namespace swCargaMasivaIngresos.Services
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 
-			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPagosExcel", $"Iniciando Radar de Excel. Folio: {param.FolioCarga}").Wait();
-
+			LogService.WriteLogAsync("WARN", param.UsuarioLogin, "ProcesadorPagosExcel", $"Iniciando Lectura por Regiones. Folio: {param.FolioCarga}").Wait();
+			throw new Exception("¡HOLA! SÍ ENTRÉ AL PROCESADOR EXCEL Y LA DLL ES NUEVA.");
 			try
 			{
 				using (var stream = File.Open(rutaArchivo, FileMode.Open, FileAccess.Read))
@@ -33,16 +33,19 @@ namespace swCargaMasivaIngresos.Services
 					{
 						string nombrePestaña = tablaExcel.TableName;
 
-						// 🚀 1. TU MAGIA EN ACCIÓN: Aisla las regiones y nos da el mapa vertical y la fila exacta de los datos
+						// 🚀 1. LLAMAMOS AL NUEVO SÚPER MOTOR VERTICAL
 						int filaInicioDatos;
 						var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(tablaExcel, out filaInicioDatos);
 
+						// Si no encontró el mapa, ignora la pestaña (está vacía o es de logos)
 						if (mapaCrudo.Count == 0) continue;
 
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraRaw();
 
-						// 🚀 2. INICIAMOS EL CICLO EXACTAMENTE DONDE EMPIEZAN LOS DATOS
+						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Iniciando bucle en fila {filaInicioDatos}").Wait();
+						
+						// 🚀 2. INICIAMOS EL CICLO EXACTAMENTE EN LA FILA DE DATOS
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
 							var fila = tablaExcel.Rows[i];
@@ -53,10 +56,23 @@ namespace swCargaMasivaIngresos.Services
 							if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 
 							string cuentaPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "CuentaPredial");
+							//if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
+
+							// 🚀 EL FILTRO SEGURO DEL AÑO (Deja vivir a los "0")
+							string anioPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio");
+							//if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+
+							// 🚀 LOG ESPÍA: Solo imprimimos las primeras 3 filas de ciudadanos para no saturar
+							if (i < filaInicioDatos + 3)
+							{
+								LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Fila {i} leída -> Cuenta: '{cuentaPredial}', Año: '{anioPredial}'").Wait();
+							}
+
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 
-							string anioPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio");
-							if (!string.IsNullOrWhiteSpace(anioPredial) && !anioPredial.Contains("2026")) continue;
+							if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+
+
 
 							DataRow nuevaFila = tablaCrudos.NewRow();
 							nuevaFila["ClaveMunicipio"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClaveMunicipio");
@@ -69,6 +85,7 @@ namespace swCargaMasivaIngresos.Services
 
 							tablaCrudos.Rows.Add(nuevaFila);
 						}
+						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Bucle finalizado. Filas crudas recolectadas: {tablaCrudos.Rows.Count}").Wait();
 
 						var resultadoLimpieza = LimpiadorDatos.LimpiarYValidar(tablaCrudos, nombrePestaña, param);
 

@@ -21,7 +21,7 @@ namespace swCargaMasivaIngresos.Services
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 			string extension = Path.GetExtension(rutaArchivo);
 
-			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPagosUniversal", $"Inicia lectura inteligente de Pagos. Folio: {param.FolioCarga}. Extensión: {extension}");
+			LogService.WriteLogAsync("WARN", param.UsuarioLogin, "ProcesadorPagosUniversal", $"Inicia lectura inteligente de Pagos. Folio: {param.FolioCarga}. Extensión: {extension}");
 
 			// =========================================================================
 			// FASE 1: LECTURA CRUDA (Lee CSV, TXT o Excel)
