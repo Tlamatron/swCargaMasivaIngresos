@@ -89,11 +89,19 @@ namespace swCargaMasivaIngresos.Services
 							}
 
 							// 🚀 5. NUEVO: RESCATE DE FECHAS SERIALES DE EXCEL
-							string fechaVigencia = MapeadorInteligente.Extraer(fila, mapaBloqueado, "FechaVigencia");
-							// Si viene como número (ej. 46104.0) y no trae guiones ni diagonales, lo traducimos
+							// 🚀 5. ESTANDARIZACIÓN UNIVERSAL DE FECHAS (Protección SQL)
+							string fechaVigencia = MapeadorInteligente.Extraer(fila, mapaBloqueado, "FechaVigencia").Trim();
+
+							// Escenario A: Viene como número serial crudo de Excel (Ej. "46104" o "46104.0")
 							if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
 							{
 								fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
+							}
+							// Escenario B: Viene como texto desde Excel (Ej. "23/03/2026" o "23-03-2026 12:00:00 a.m.")
+							else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
+							{
+								// Lo forzamos al estándar universal de SQL Server para evitar colisiones de idioma
+								fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
 							}
 
 							DataRow nuevaFila = tablaCrudos.NewRow();
