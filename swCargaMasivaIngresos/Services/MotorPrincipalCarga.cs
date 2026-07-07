@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Hangfire;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -25,6 +26,7 @@ namespace swCargaMasivaIngresos.Services
 		/// <param name="extension"></param>
 		/// <param name="parametros"></param>
 		/// <returns></returns>
+		[AutomaticRetry(Attempts = 0)]
 		public static async Task EjecutarEnSegundoPlano(string rutaArchivo, string extension, ParametrosCarga parametros)
 		{
 			ResultadoProceso resultado = null;
