@@ -171,27 +171,34 @@ namespace swCargaMasivaIngresos.Services
 				{
 					foreach (var kvp in mapaCrudo)
 					{
+						// Si la columna tiene el sinónimo Y no ha sido reclamada por nadie más...
 						if (kvp.Key.Contains(sin) && !columnasUsadas.Contains(kvp.Value))
 						{
 							oficial.Columnas[nombreOficial] = kvp.Value;
-							columnasUsadas.Add(kvp.Value);
+							columnasUsadas.Add(kvp.Value); // 🔒 Se bloquea la columna
 							return;
 						}
 					}
 				}
 			}
 
+			// 🚀 1. PRIMERO ASEGURAMOS LOS METADATOS COMPUESTOS (El blindaje)
+			// Al reclamar estas columnas primero, evitamos que la palabra "PAGO" confunda al Impuesto
+			Asignar("ClasePago", "CLASE DE PAGO", "CLASE");
+			Asignar("BimestreConsolidado", "BIMESTRE PAGADO", "BIMESTRE", "PERIODO", "MESES");
+			Asignar("ClaveMunicipio", "CLAVE DEL MUNICIPIO", "MUNICIPIO", "CVEMUN", "MPIO");
+			Asignar("TipoPredio", "TIPO DE PREDIO", "PREDIO", "TIPO", "DESC_PRED");
+
+			// 🚀 2. DESPUÉS LAS GENERALES Y EL DINERO
 			Asignar("CuentaPredial", "CUENTA", "PREDIAL", "CTA", "CTA.", "CLAVE");
-			Asignar("Anio", "AÑO", "EJERCICIO");
+			Asignar("Anio", "AÑO", "EJERCICIO", "EJERCICIO FISCAL");
+			// Ahora sí es 100% seguro buscar "PAGO", porque las columnas de arriba ya están bloqueadas.
 			Asignar("ImpuestoDeterminado", "SALDO", "TOTAL", "PAGO", "IMPUESTO", "IMPORTE");
 			Asignar("FechaVigencia", "FECHA", "VIGENCIA");
-			Asignar("ClaveMunicipio", "CLAVE DEL MUNICIPIO", "MUNICIPIO", "CVEMUN");
-			Asignar("TipoPredio", "TIPO DE PREDIO", "PREDIO", "TIPO");
-			Asignar("ClasePago", "CLASE DE PAGO", "CLASE");
 
+			// 🚀 3. EL RESTO
 			Asignar("NombrePropietario", "NOMBRE", "PROPIETARIO", "CONTRIBUYENTE");
 			Asignar("BaseGravable", "BASE GRAVABLE", "BASE", "VALOR CATASTRAL");
-			Asignar("BimestreConsolidado", "BIMESTRE", "PERIODO", "MESES");
 
 			string[] columnasBimestrales = { "1", "2", "3", "4", "5", "6", "B1", "B2", "B3", "B4", "B5", "B6" };
 			foreach (var col in columnasBimestrales)
