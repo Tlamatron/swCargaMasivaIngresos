@@ -41,6 +41,12 @@ namespace swCargaMasivaIngresos.Services
 						if (mapaCrudo.Count == 0) continue;
 
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
+						// 🚀 CANDADO FINANCIERO 1: Exigir la columna de pago
+						if (!mapaBloqueado.Columnas.ContainsKey("ImpuestoDeterminado"))
+						{
+							throw new Exception("El archivo carece de una columna identificable para el Monto/Pago (Ej. PAGO, IMPORTE, TOTAL, IMPUESTO). Al ser una carga de Pagos, este dato es estrictamente obligatorio.");
+						}
+
 						DataTable tablaCrudos = CrearEstructuraRaw();
 
 						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Iniciando bucle en fila {filaInicioDatos}").Wait();

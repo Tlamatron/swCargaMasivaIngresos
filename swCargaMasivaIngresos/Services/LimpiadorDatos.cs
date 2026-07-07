@@ -165,6 +165,15 @@ namespace swCargaMasivaIngresos.Services
 				if (!short.TryParse(claveMun, out short numMun) || numMun < 1 || numMun > 217) erroresFila.Add($"Clave de municipio '{claveMun}' inválida.");
 				if (!byte.TryParse(tipoPre, out byte numPre) || numPre < 1 || numPre > 3) erroresFila.Add($"Tipo de predio '{tipoPre}' inválido (1=Urbano, 2=Rústico, 3=Suburbano).");
 
+				// 🚀 CANDADO FINANCIERO 2: Si es una carga de Pagos (Tipo 2), el monto es obligatorio y debe ser mayor a 0
+				if (param != null && param.TipoCargaId == 2)
+				{
+					string importeStr = fila["ImpuestoDeterminado"]?.ToString().Replace("$", "").Replace(",", "").Trim();
+					if (string.IsNullOrWhiteSpace(importeStr) || !decimal.TryParse(importeStr, out decimal importePagado) || importePagado <= 0)
+					{
+						erroresFila.Add("El monto del pago está vacío, es $0.00 o tiene un formato inválido.");
+					}
+				}
 				// =======================================================================
 				// 🚦 DISTRIBUCIÓN A TABLAS DE SALIDA
 				// =======================================================================
