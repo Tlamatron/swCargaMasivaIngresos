@@ -17,8 +17,8 @@ namespace swCargaMasivaIngresos.Services
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 
-			LogService.WriteLogAsync("WARN", param.UsuarioLogin, "ProcesadorPagosExcel", $"Iniciando Lectura por Regiones. Folio: {param.FolioCarga}").Wait();
-			throw new Exception("¡HOLA! SÍ ENTRÉ AL PROCESADOR EXCEL Y LA DLL ES NUEVA.");
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPagosExcel", $"Iniciando Lectura por Regiones. Folio: {param.FolioCarga}").Wait();
+			
 			try
 			{
 				using (var stream = File.Open(rutaArchivo, FileMode.Open, FileAccess.Read))
@@ -44,7 +44,7 @@ namespace swCargaMasivaIngresos.Services
 						DataTable tablaCrudos = CrearEstructuraRaw();
 
 						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Iniciando bucle en fila {filaInicioDatos}").Wait();
-						
+
 						// 🚀 2. INICIAMOS EL CICLO EXACTAMENTE EN LA FILA DE DATOS
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
@@ -56,35 +56,98 @@ namespace swCargaMasivaIngresos.Services
 							if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 
 							string cuentaPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "CuentaPredial");
-							//if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
-
-							// 🚀 EL FILTRO SEGURO DEL AÑO (Deja vivir a los "0")
-							string anioPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio");
-							//if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
-
-							// 🚀 LOG ESPÍA: Solo imprimimos las primeras 3 filas de ciudadanos para no saturar
-							if (i < filaInicioDatos + 3)
-							{
-								LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Fila {i} leída -> Cuenta: '{cuentaPredial}', Año: '{anioPredial}'").Wait();
-							}
-
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
+
+							// 🚀 NUEVO: Limpiamos el .0 que inyecta Excel en las celdas numéricas
+							if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
+
+							// 1. AÑO POR DEFECTO
+							string anioPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio");
+							if (string.IsNullOrWhiteSpace(anioPredial)) anioPredial = DateTime.Now.Year.ToString();
 
 							if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
 
+							// 2. HOMOLOGACIÓN DE TIPO DE PREDIO (Zoquitlán)
+							string tipoPredio = MapeadorInteligente.Extraer(fila, mapaBloqueado, "TipoPredio").ToUpper().Trim();
+							if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
+							else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO")) tipoPredio = "2";
+							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO")) tipoPredio = "3";
+							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1"; // Si por algo no se mapeó, forzamos Urbano.
 
+							// 3. INYECCIÓN TEMPRANA DE CLASE Y BIMESTRE
+							string clasePago = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClasePago");
+							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "1"; // Anual
+
+							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "0"; // Todos
+
+							// 4. DOBLE ESCUDO DEL MUNICIPIO (Previene el '0')
+							string claveMunicipio = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClaveMunicipio");
+							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
+							{
+								claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
+							}
+
+							// 🚀 5. NUEVO: RESCATE DE FECHAS SERIALES DE EXCEL
+							string fechaVigencia = MapeadorInteligente.Extraer(fila, mapaBloqueado, "FechaVigencia");
+							// Si viene como número (ej. 46104.0) y no trae guiones ni diagonales, lo traducimos
+							if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
+							{
+								fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
+							}
 
 							DataRow nuevaFila = tablaCrudos.NewRow();
-							nuevaFila["ClaveMunicipio"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClaveMunicipio");
-							nuevaFila["TipoPredio"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "TipoPredio");
+							nuevaFila["ClaveMunicipio"] = claveMunicipio;
+							nuevaFila["TipoPredio"] = tipoPredio;
 							nuevaFila["CuentaPredial"] = cuentaPredial;
-							nuevaFila["ClasePago"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClasePago");
-							nuevaFila["Bimestre"] = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+							nuevaFila["ClasePago"] = clasePago;
+							nuevaFila["Bimestre"] = bimestre;
 							nuevaFila["ImpuestoDeterminado"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ImpuestoDeterminado");
-							nuevaFila["FechaVigencia"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "FechaVigencia");
+							nuevaFila["FechaVigencia"] = fechaVigencia;
 
 							tablaCrudos.Rows.Add(nuevaFila);
 						}
+
+
+						//for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
+						//{
+						//	var fila = tablaExcel.Rows[i];
+
+						//	string textoInicioFila = string.Join(" ", fila.ItemArray.Take(3).Select(x => x?.ToString().ToUpper() ?? ""));
+						//	if (textoInicioFila.Contains("TOTAL")) break;
+
+						//	if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
+
+						//	string cuentaPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "CuentaPredial");
+						//	//if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
+
+						//	// 🚀 EL FILTRO SEGURO DEL AÑO (Deja vivir a los "0")
+						//	string anioPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio");
+						//	//if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+
+						//	// 🚀 LOG ESPÍA: Solo imprimimos las primeras 3 filas de ciudadanos para no saturar
+						//	if (i < filaInicioDatos + 3)
+						//	{
+						//		LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Fila {i} leída -> Cuenta: '{cuentaPredial}', Año: '{anioPredial}'").Wait();
+						//	}
+
+						//	if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
+
+						//	if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+
+
+
+						//	DataRow nuevaFila = tablaCrudos.NewRow();
+						//	nuevaFila["ClaveMunicipio"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClaveMunicipio");
+						//	nuevaFila["TipoPredio"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "TipoPredio");
+						//	nuevaFila["CuentaPredial"] = cuentaPredial;
+						//	nuevaFila["ClasePago"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClasePago");
+						//	nuevaFila["Bimestre"] = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+						//	nuevaFila["ImpuestoDeterminado"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ImpuestoDeterminado");
+						//	nuevaFila["FechaVigencia"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "FechaVigencia");
+
+						//	tablaCrudos.Rows.Add(nuevaFila);
+						//}
 						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Bucle finalizado. Filas crudas recolectadas: {tablaCrudos.Rows.Count}").Wait();
 
 						var resultadoLimpieza = LimpiadorDatos.LimpiarYValidar(tablaCrudos, nombrePestaña, param);

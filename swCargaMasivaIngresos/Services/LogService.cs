@@ -25,26 +25,34 @@ namespace swCargaMasivaIngresos.Services
 		/// </summary>
 		public static Task WriteLogAsync(string nivel, string usuario, string origen, string mensaje)
 		{
-			// 1. FILTRO DE AHORRO: Si es informativo, salimos inmediatamente para proteger el servidor de logs
-			if (nivel.Equals("INFO", StringComparison.OrdinalIgnoreCase) ||
-				nivel.Equals("OK", StringComparison.OrdinalIgnoreCase))
+			// 🚀 1. DETECTAR EL AMBIENTE DESDE WEB.CONFIG
+			string ambiente = ConfigurationManager.AppSettings["Ambiente"] ?? "Test";
+			bool esProduccion = ambiente.Equals("Prod", StringComparison.OrdinalIgnoreCase) ||
+								ambiente.Equals("Produccion", StringComparison.OrdinalIgnoreCase);
+
+			// 🚀 2. FILTRO INTELIGENTE: Solo bloqueamos los INFO/OK si estamos en Producción.
+			// Si estamos en Dev/Test, dejamos pasar todo para depurar a gusto.
+			if (esProduccion)
 			{
-				return Task.FromResult(0);
+				if (nivel.Equals("INFO", StringComparison.OrdinalIgnoreCase) ||
+					nivel.Equals("OK", StringComparison.OrdinalIgnoreCase))
+				{
+					return Task.FromResult(0);
+				}
 			}
 
-			// 2. RECUPERACIÓN AUTOMÁTICA DE IDENTIDAD (Fallback para solicitudes Web)
+			// 3. RECUPERACIÓN AUTOMÁTICA DE IDENTIDAD (Fallback para solicitudes Web)
 			if (string.IsNullOrWhiteSpace(usuario))
 			{
 				usuario = System.Web.HttpContext.Current?.User?.Identity?.Name ?? "SISTEMA_ETL";
 			}
 
-			// 3. ENCOLA EL LOG EN SEGUNDO PLANO (Fire-and-Forget)
+			// 4. ENCOLA EL LOG EN SEGUNDO PLANO (Fire-and-Forget)
 			HostingEnvironment.QueueBackgroundWorkItem(async cancellationToken =>
 			{
 				try
 				{
-					string ambiente = ConfigurationManager.AppSettings["Ambiente"] ?? "Test";
-					string baseUrl = ambiente.Equals("Prod", StringComparison.OrdinalIgnoreCase)
+					string baseUrl = esProduccion
 						? ConfigurationManager.AppSettings["LogServiceUrlProd"]
 						: ConfigurationManager.AppSettings["LogServiceUrlTest"];
 
@@ -53,7 +61,7 @@ namespace swCargaMasivaIngresos.Services
 					string logMessage = $"| {usuario} | {nivel.ToUpper()} | {origen} | {mensaje}";
 					var content = new StringContent($"\"{logMessage}\"", Encoding.UTF8, "application/json");
 
-					await _httpClient.PostAsync(urlFinal, content, cancellationToken);
+					var response = await _httpClient.PostAsync(urlFinal, content, cancellationToken);
 #if DEBUG
 					string responseBody = await response.Content.ReadAsStringAsync();
 					System.Diagnostics.Debug.WriteLine($"[LOG {nivel}] {response.StatusCode} - {responseBody}");
@@ -61,7 +69,7 @@ namespace swCargaMasivaIngresos.Services
 				}
 				catch (Exception ex)
 				{
-					System.Diagnostics.Debug.WriteLine($"[LOG ERROR EN BACKGROUND] {usuario} | {origen} | {mensaje} | {ex.Message}");
+					System.Diagnostics.Debug.WriteLine($"Fallo crítico al intentar guardar el log: {ex.Message}");
 				}
 			});
 

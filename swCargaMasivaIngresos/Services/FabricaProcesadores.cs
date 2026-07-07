@@ -12,37 +12,31 @@ namespace swCargaMasivaIngresos.Services
 		{
 			string ext = extension.ToLower().Trim();
 
-			// 🚀 REGLA UNIVERSAL PARA TIPO 2 (PAGOS)
-			// No importa si es Excel, TXT o CSV, el Motor Universal lo procesa.
-			if (tipoCargaId == 2)
-			{
-				return new ProcesadorPagosUniversal();
-			}
-
-			// -------------------------------------------------------------
-			// REGLAS ANTIGUAS (Para Tipo 1 y 3) que se mantienen intactas
-			// -------------------------------------------------------------
+			// 1. RUTA PARA ARCHIVOS DE TEXTO PLANO (TXT y CSV)
 			if (ext == ".txt" || ext == ".csv")
 			{
 				switch (tipoCargaId)
 				{
 					case 1: return new ProcesadorPadronTXT();
+					case 2: return new ProcesadorPagosUniversal(); 
 					case 3: return new ProcesadorReduccionesTXT();
 					default: throw new NotSupportedException($"El TipoCargaId '{tipoCargaId}' no existe en texto.");
 				}
 			}
 
+			// 2. RUTA PARA ARCHIVOS DE EXCEL (XLSX y XLS)
 			if (ext == ".xlsx" || ext == ".xls")
 			{
 				switch (tipoCargaId)
 				{
 					case 1: return new ProcesadorPadronExcel();
+					case 2: return new ProcesadorPagosExcel(); 
 					case 3: return new ProcesadorReduccionesExcel();
 					default: throw new NotSupportedException($"El TipoCargaId '{tipoCargaId}' no existe en Excel.");
 				}
 			}
 
-			throw new NotSupportedException($"La extensión '{ext}' no está soportada actualmente por el sistema.");
+			throw new NotSupportedException($"Extensión de archivo no soportada: {extension}");
 		}
 	}
 }
