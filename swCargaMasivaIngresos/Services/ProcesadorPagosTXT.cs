@@ -44,7 +44,10 @@ namespace swCargaMasivaIngresos.Services
 					string claveMunicipio = col[0].Trim();
 					string tipoPredio = col[1].Trim();
 					string cuentaPredial = col[2].Trim();
-					string strBimestre = col[21].Trim(); // 🚀 EXTRAEMOS EL BIMESTRE
+					string strBimestre = col[21].Trim();
+					string clasePago = col[20].Trim(); 
+					string impuestoDeterminado = col[22].Trim();
+					//string descuento = col[23].Trim(); 
 
 					// 3. Validaciones
 					if (string.IsNullOrEmpty(cuentaPredial))
@@ -82,7 +85,9 @@ namespace swCargaMasivaIngresos.Services
 						tipoPre.ToString(),
 						cuentaPredial,
 						param.FolioCarga,
-						bimestre.ToString() // 🚀 LO INYECTAMOS EN STAGING
+						bimestre.ToString(),
+						string.IsNullOrWhiteSpace(clasePago) ? DBNull.Value : (object)clasePago,
+						string.IsNullOrWhiteSpace(impuestoDeterminado) ? DBNull.Value : (object)impuestoDeterminado
 					);
 
 					resultado.RegistrosExitosos++;
@@ -114,6 +119,9 @@ namespace swCargaMasivaIngresos.Services
 			tabla.Columns.Add("CuentaPredial", typeof(string));
 			tabla.Columns.Add("FolioCarga", typeof(int));
 			tabla.Columns.Add("Bimestre", typeof(string));
+
+			tabla.Columns.Add("ClasePago", typeof(string));
+			tabla.Columns.Add("ImpuestoDeterminado", typeof(string));
 			return tabla;
 		}
 
@@ -125,11 +133,24 @@ namespace swCargaMasivaIngresos.Services
 
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
+					// OJO: Asegúrate de que la tabla 'Staging_Etiquetado' tenga estas columnas nuevas en SQL Server
 					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
+					bulkCopy.BatchSize = 10000;  // Vital para alta demanda
+					bulkCopy.BulkCopyTimeout = 120; // Previene timeouts por bloqueos
+
+					// 🚀 MAPEO EXPLÍCITO (Blindaje contra desorden de columnas en BD)
+					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
+					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
+					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
+					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
+					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
+					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
+					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
+					//bulkCopy.ColumnMappings.Add("Descuento", "Descuento"); // Usa el nombre exacto de tu BD
+
 					bulkCopy.WriteToServer(lote);
 				}
 
-				// Llamamos al SP que marca las cuentas como pagadas
 				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
