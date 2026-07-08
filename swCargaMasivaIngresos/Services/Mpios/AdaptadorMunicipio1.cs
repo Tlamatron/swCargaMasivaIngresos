@@ -10,6 +10,9 @@ using System.Web;
 
 namespace swCargaMasivaIngresos.Services.Mpios
 {
+	/// <summary>
+	/// Clase adaptadora para el municipio 1. Esta clase implementa la interfaz IMunicipioAdapter y se encarga de obtener y mapear los datos del padrón del municipio 1 al formato estándar utilizado por la aplicación.
+	/// </summary>
 	public class AdaptadorMunicipio1 : IMunicipioAdapter
 	{
 		public async Task<List<PadronEstandarDTO>> ObtenerYMapearDatosAsync(ConfiguracionWSDTO config)

@@ -9,10 +9,18 @@ using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Clase ServicioNotificacion que se encarga de enviar correos electrónicos de notificación a los usuarios después de procesar un archivo de carga masiva. El correo incluye un resumen del resultado del proceso, así como un archivo CSV adjunto con los registros rechazados si los hay.
+	/// </summary>
 	public static class ServicioNotificacion
 	{
-		private static readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
-
+		/// <summary>
+		/// Método que envía un correo electrónico de notificación al usuario después de procesar un archivo de carga masiva. El correo incluye un resumen del resultado del proceso y, si hay registros rechazados, se adjunta un archivo CSV con los detalles de los errores.
+		/// </summary>
+		/// <param name="parametros"></param>
+		/// <param name="resultado"></param>
+		/// <param name="correoUsuario"></param>
+		/// <returns></returns>
 		public static async Task EnviarCorreoNotificacion(ParametrosCarga parametros, ResultadoProceso resultado, string correoUsuario)
 		{
 			try

@@ -13,8 +13,18 @@ namespace swCargaMasivaIngresos.Services
 	/// </summary>
 	public class ResultadoLecturaCruda
 	{
+		/// <summary>
+		/// Tabla cruda en memoria que contiene los datos leídos del archivo físico (Excel, TXT, CSV). Esta tabla no tiene encabezados definidos y puede contener errores estructurales que deben ser manejados posteriormente.
+		/// </summary>
 		public DataTable TablaCruda { get; set; }
-		public string ContextoPestaña { get; set; } // Guardará "ENERO 2026", "URBANO", etc.
+		/// <summary>
+		/// Guarda el contexto de la pestaña o sección del archivo leído, como "ENERO 2026", "URBANO", etc. Este valor se extrae principalmente de archivos Excel y puede ser útil para identificar la fuente o el propósito de los datos leídos.
+		/// </summary>
+		public string ContextoPestaña { get; set; }
+
+		/// <summary>
+		/// Guarda los errores estructurales encontrados durante la lectura del archivo físico, como problemas de formato, delimitadores incorrectos o extensiones no soportadas. Estos errores deben ser revisados antes de proceder con el mapeo y la validación de los datos.
+		/// </summary>
 		public List<string> ErroresEstructurales { get; set; } = new List<string>();
 	}
 
@@ -23,6 +33,12 @@ namespace swCargaMasivaIngresos.Services
 	/// </summary>
 	public static class LectorUniversal
 	{
+		/// <summary>
+		/// Lee un archivo físico (Excel, TXT, CSV) y devuelve un objeto ResultadoLecturaCruda que contiene la tabla cruda en memoria, el contexto de la pestaña y cualquier error estructural encontrado durante la lectura.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="extension"></param>
+		/// <returns></returns>
 		public static ResultadoLecturaCruda LeerArchivo(string rutaArchivo, string extension)
 		{
 			var resultado = new ResultadoLecturaCruda();
@@ -51,6 +67,11 @@ namespace swCargaMasivaIngresos.Services
 			return resultado;
 		}
 
+		/// <summary>
+		/// Lee un archivo Excel (.xlsx o .xls) y devuelve un objeto ResultadoLecturaCruda que contiene la tabla cruda en memoria, el contexto de la pestaña y cualquier error estructural encontrado durante la lectura.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <returns></returns>
 		private static ResultadoLecturaCruda LeerExcel(string rutaArchivo)
 		{
 			var resultado = new ResultadoLecturaCruda { TablaCruda = new DataTable() };
@@ -82,6 +103,11 @@ namespace swCargaMasivaIngresos.Services
 			return resultado;
 		}
 
+		/// <summary>
+		/// Lee un archivo de texto plano (.txt o .csv) y devuelve un objeto ResultadoLecturaCruda que contiene la tabla cruda en memoria, el contexto de la pestaña y cualquier error estructural encontrado durante la lectura.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <returns></returns>
 		private static ResultadoLecturaCruda LeerTextoPlano(string rutaArchivo)
 		{
 			var resultado = new ResultadoLecturaCruda { TablaCruda = new DataTable() };

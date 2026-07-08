@@ -7,11 +7,34 @@ namespace swCargaMasivaIngresos.Models
 	/// </summary>
 	public class MenuDTO
 	{
+		/// <summary>
+		/// Método que obtiene o establece el identificador único del menú. Este valor es utilizado para diferenciar cada menú dentro de la aplicación y puede ser referenciado en otras partes del sistema para realizar operaciones relacionadas con el menú.
+		/// </summary>
 		public int MenuId { get; set; }
+
+		/// <summary>
+		/// Método que obtiene o establece el identificador del menú padre. Este valor es opcional y se utiliza para establecer relaciones jerárquicas entre menús, permitiendo la creación de sub-menús. Si el menú no tiene un padre, este valor puede ser nulo.
+		/// </summary>
 		public int? MenuPadreId { get; set; }
+
+		/// <summary>
+		/// Método que obtiene o establece el nombre del menú. Este valor es utilizado para mostrar el texto correspondiente en la interfaz de usuario, permitiendo a los usuarios identificar y seleccionar el menú deseado.
+		/// </summary>
 		public string Nombre { get; set; }
+
+		/// <summary>
+		/// Método que obtiene o establece la ruta URL asociada al menú. Este valor define la dirección a la que se redirigirá al usuario cuando seleccione el menú, permitiendo la navegación dentro de la aplicación.
+		/// </summary>
 		public string RutaUrl { get; set; }
+
+		/// <summary>
+		/// Método que obtiene o establece el icono asociado al menú. Este valor puede ser utilizado para mostrar un ícono visual junto al nombre del menú en la interfaz de usuario, mejorando la experiencia de navegación y facilitando la identificación rápida de las opciones disponibles.
+		/// </summary>
 		public string Icono { get; set; }
+
+		/// <summary>
+		/// Método que obtiene o establece el orden de aparición del menú. Este valor determina la posición en la que el menú se mostrará dentro de la lista de menús, permitiendo organizar las opciones de manera lógica y coherente para los usuarios.
+		/// </summary>
 		public int Orden { get; set; }
 
 		// Esta lista nos servirá en el Front-end si en el futuro tenemos sub-menús

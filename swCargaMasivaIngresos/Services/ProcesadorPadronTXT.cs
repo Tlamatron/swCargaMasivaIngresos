@@ -13,9 +13,14 @@ namespace swCargaMasivaIngresos.Services
 	/// </summary>
 	public class ProcesadorPadronTXT : IProcesadorFormato
 	{
-		private readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+		/// <summary>
+		/// Método principal para procesar el archivo de texto plano del padrón catastral.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -203,12 +208,22 @@ namespace swCargaMasivaIngresos.Services
 			return resultado;
 		}
 
+		/// <summary>
+		/// Marca un error en el resultado del proceso, incrementando el contador de registros fallidos y agregando un detalle del error.
+		/// </summary>
+		/// <param name="res"></param>
+		/// <param name="linea"></param>
+		/// <param name="msg"></param>
 		private void MarcarError(ResultadoProceso res, int linea, string msg)
 		{
 			res.RegistrosFallidos++;
 			res.ErroresDetalle.Add($"Línea {linea}: {msg}");
 		}
 
+		/// <summary>
+		/// Método privado que crea la estructura de un DataTable para almacenar temporalmente los datos del padrón antes de ser insertados en la base de datos. Define las columnas necesarias y sus tipos de datos.
+		/// </summary>
+		/// <returns></returns>
 		private DataTable CrearEstructuraPadron()
 		{
 			var tabla = new DataTable();
@@ -241,6 +256,11 @@ namespace swCargaMasivaIngresos.Services
 			return tabla;
 		}
 
+		/// <summary>
+		/// Método privado que realiza la inserción masiva de un lote de datos en la base de datos utilizando SqlBulkCopy y posteriormente llama a un procedimiento almacenado para procesar el MERGE de los datos. Maneja excepciones de SQL y registra errores en caso de fallas.
+		/// </summary>
+		/// <param name="lote"></param>
+		/// <param name="param"></param>
 		private void InsertarLoteEnBD(DataTable lote, ParametrosCarga param)
 		{
 			try

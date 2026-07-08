@@ -5,17 +5,32 @@ using System.Linq;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Mapeador inteligente que analiza un DataTable en memoria y genera un mapeo de columnas basado en encabezados encontrados, incluyendo la detección de bimestres sueltos y metadatos compuestos. Este mapeador permite extraer datos de manera flexible y robusta, incluso cuando los encabezados están distribuidos en varias filas o contienen sinónimos.
+	/// </summary>
 	public static class MapeadorInteligente
 	{
+		/// <summary>
+		/// Contiene el mapeo oficial de columnas y bimestres sueltos, donde las claves son los nombres oficiales y los valores son los índices de columna correspondientes en el DataTable. Este objeto se utiliza para extraer datos de manera consistente y evitar conflictos entre sinónimos o encabezados similares.
+		/// </summary>
 		public class MapaOficial
 		{
+			/// <summary>
+			/// Contiene el mapeo de columnas oficiales, donde la clave es el nombre oficial de la columna (ej. "CuentaPredial", "Anio", "ImpuestoDeterminado") y el valor es el índice de columna correspondiente en el DataTable. Este diccionario permite acceder a los datos de manera consistente y evita errores al referirse a columnas inexistentes.
+			/// </summary>
 			public Dictionary<string, int> Columnas { get; set; } = new Dictionary<string, int>();
+			/// <summary>
+			/// Contiene el mapeo de bimestres sueltos, donde la clave es el nombre del bimestre (ej. "1", "2", "3", "B1", "B2") y el valor es el índice de columna correspondiente en el DataTable. Este diccionario permite rastrear los bimestres detectados en los datos y facilita la extracción de información relacionada con pagos bimestrales.
+			/// </summary>
 			public Dictionary<string, int> BimestresSueltos { get; set; } = new Dictionary<string, int>();
 		}
 
-		// =========================================================================================
-		// 🚀 LA IDEA DEL USUARIO: EXTRACCIÓN VERTICAL POR REGIONES (Bounding Box)
-		// =========================================================================================
+		/// <summary>
+		/// Extrae un mapeo de columnas basado en encabezados encontrados en un DataTable, utilizando un enfoque de extracción vertical por regiones. Este método identifica la fila de encabezado y la fila de inicio de datos, y luego construye un diccionario que asocia los nombres de columna con sus índices correspondientes.
+		/// </summary>
+		/// <param name="tabla"></param>
+		/// <param name="filaInicioDatos"></param>
+		/// <returns></returns>
 		public static Dictionary<string, int> ObtenerMapaPorRegiones(DataTable tabla, out int filaInicioDatos)
 		{
 			filaInicioDatos = -1;
@@ -160,6 +175,11 @@ namespace swCargaMasivaIngresos.Services
 			return mapaCrudo;
 		}
 
+		/// <summary>
+		/// Procesa un diccionario de encabezados crudos y genera un mapeo oficial de columnas y bimestres sueltos, asegurando que no haya conflictos entre sinónimos y que las columnas importantes sean reclamadas primero. Este método utiliza una memoria interna para bloquear columnas ya asignadas y evitar que se asignen múltiples sinónimos a la misma columna.
+		/// </summary>
+		/// <param name="mapaCrudo"></param>
+		/// <returns></returns>
 		public static MapaOficial ProcesarEncabezadosConMemoria(Dictionary<string, int> mapaCrudo)
 		{
 			var oficial = new MapaOficial();
@@ -213,6 +233,13 @@ namespace swCargaMasivaIngresos.Services
 			return oficial;
 		}
 
+		/// <summary>
+		/// Permite extraer el valor de una columna específica de un DataRow utilizando un mapeo oficial de columnas. Si la columna no existe en el mapeo, devuelve una cadena vacía. Este método asegura que los datos se extraigan de manera consistente y evita errores al acceder a columnas inexistentes.
+		/// </summary>
+		/// <param name="fila"></param>
+		/// <param name="mapa"></param>
+		/// <param name="columna"></param>
+		/// <returns></returns>
 		public static string Extraer(DataRow fila, MapaOficial mapa, string columna)
 		{
 			if (mapa.Columnas.ContainsKey(columna))
@@ -222,6 +249,12 @@ namespace swCargaMasivaIngresos.Services
 			return string.Empty;
 		}
 
+		/// <summary>
+		/// Permite rastrear los bimestres sueltos en un DataRow utilizando un mapeo oficial de columnas. Este método busca los valores de las columnas correspondientes a los bimestres y devuelve una cadena con los bimestres detectados, separados por comas. Si no se detectan bimestres sueltos, intenta extraer el valor del bimestre consolidado.
+		/// </summary>
+		/// <param name="fila"></param>
+		/// <param name="mapa"></param>
+		/// <returns></returns>
 		public static string RastrearBimestres(DataRow fila, MapaOficial mapa)
 		{
 			List<string> detectados = new List<string>();

@@ -8,11 +8,19 @@ using System.Text;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Clase ProcesadorPagosTXT que implementa la interfaz IProcesadorFormato. Este procesador se encarga de leer archivos de texto (TXT) que contienen datos de pagos, mapearlos, limpiarlos y validarlos, y finalmente insertar los registros válidos en la base de datos mediante una operación de inserción masiva.
+	/// </summary>
 	public class ProcesadorPagosTXT : IProcesadorFormato
 	{
-		private readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+		/// <summary>
+		/// Método principal que procesa un archivo de pagos en formato TXT. Lee el archivo línea por línea, valida cada registro, y si es válido, lo agrega a una tabla en memoria. Una vez que se alcanza un cierto número de registros o al finalizar la lectura del archivo, se realiza una inserción masiva en la base de datos.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -105,12 +113,22 @@ namespace swCargaMasivaIngresos.Services
 			return resultado;
 		}
 
+		/// <summary>
+		/// Marca un error en el resultado del proceso, incrementando el contador de registros fallidos y agregando un mensaje de error detallado.
+		/// </summary>
+		/// <param name="res"></param>
+		/// <param name="linea"></param>
+		/// <param name="msg"></param>
 		private void MarcarError(ResultadoProceso res, int linea, string msg)
 		{
 			res.RegistrosFallidos++;
 			res.ErroresDetalle.Add($"Línea {linea}: {msg}");
 		}
 
+		/// <summary>
+		/// Método privado que crea la estructura de un DataTable para almacenar temporalmente los datos de pagos antes de ser insertados en la base de datos. Define las columnas necesarias y sus tipos de datos.
+		/// </summary>
+		/// <returns></returns>
 		private DataTable CrearEstructuraPagos()
 		{
 			var tabla = new DataTable();
@@ -125,6 +143,11 @@ namespace swCargaMasivaIngresos.Services
 			return tabla;
 		}
 
+		/// <summary>
+		/// Método privado que realiza la inserción masiva de un lote de registros en la base de datos utilizando SqlBulkCopy. Después de insertar los registros, llama a un procedimiento almacenado para procesar los datos insertados.
+		/// </summary>
+		/// <param name="lote"></param>
+		/// <param name="param"></param>
 		private void InsertarLoteEnBD(DataTable lote, ParametrosCarga param)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))

@@ -8,6 +8,12 @@ namespace swCargaMasivaIngresos.Services
 	/// </summary>
 	public interface IProcesadorFormato
 	{
+		/// <summary>
+		/// Método que procesa un archivo de entrada, lee sus datos y los inserta en la base de datos según el formato específico implementado. Devuelve un objeto ResultadoProceso que contiene información sobre el número de registros exitosos, fallidos y detalles de errores.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="parametros"></param>
+		/// <returns></returns>
 		ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga parametros);
 	}
 
@@ -36,6 +42,9 @@ namespace swCargaMasivaIngresos.Services
 		/// empty.</remarks>
 		public List<string> ErroresDetalle { get; set; }
 
+		/// <summary>
+		/// Tabla que contiene los registros que fueron rechazados durante el proceso de lectura e inserción de datos. Esta tabla puede incluir información como el número de línea del archivo original, los valores de las columnas y un mensaje de error que explique por qué el registro fue rechazado. Se utiliza para generar reportes o para que el usuario pueda revisar y corregir los datos antes de intentar procesarlos nuevamente.
+		/// </summary>
 		public System.Data.DataTable TablaRechazados { get; set; }
 	}
 }

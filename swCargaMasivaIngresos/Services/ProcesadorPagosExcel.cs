@@ -9,10 +9,19 @@ using System.Linq;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Clase ProcesadorPagosExcel que implementa la interfaz IProcesadorFormato. Este procesador se encarga de leer archivos Excel que contienen datos de pagos, mapearlos, limpiarlos y validarlos, y finalmente insertar los registros válidos en la base de datos mediante una operación de inserción masiva.
+	/// </summary>
 	public class ProcesadorPagosExcel : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+		/// <summary>
+		/// Método principal para procesar un archivo Excel de pagos. Este método realiza la lectura del archivo, mapea los datos, limpia y valida los registros, y finalmente inserta los registros válidos en la base de datos.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -146,6 +155,10 @@ namespace swCargaMasivaIngresos.Services
 			return resultadoFinal;
 		}
 
+		/// <summary>
+		/// Método privado que crea y devuelve la estructura de un DataTable para almacenar temporalmente los registros crudos de pagos antes de su limpieza y validación. Esta estructura incluye columnas para ClaveMunicipio, TipoPredio, CuentaPredial, ClasePago, Bimestre, ImpuestoDeterminado, FechaVigencia y FolioCarga.
+		/// </summary>
+		/// <returns></returns>
 		private DataTable CrearEstructuraRaw()
 		{
 			DataTable dt = new DataTable();
@@ -160,6 +173,10 @@ namespace swCargaMasivaIngresos.Services
 			return dt;
 		}
 
+		/// <summary>
+		/// Método privado que realiza la inserción masiva de los registros válidos de pagos en la base de datos utilizando SqlBulkCopy. Se asegura de mapear correctamente las columnas del DataTable a las columnas de la tabla de destino en la base de datos y luego ejecuta un procedimiento almacenado para procesar los registros insertados.
+		/// </summary>
+		/// <param name="lote"></param>
 		private void InsertarBulk(DataTable lote)
 		{
 			foreach (DataRow row in lote.Rows)

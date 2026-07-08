@@ -8,11 +8,19 @@ using System.IO;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Clase ProcesadorReduccionesExcel que implementa la interfaz IProcesadorFormato. Este procesador se encarga de leer archivos Excel que contienen datos de reducciones, mapearlos, limpiarlos y validarlos, y finalmente insertar los registros válidos en la base de datos mediante una operación de inserción masiva.
+	/// </summary>
 	public class ProcesadorReduccionesExcel : IProcesadorFormato
 	{
-		private readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+		/// <summary>
+		/// Método principal que procesa un archivo Excel de reducciones. Lee el archivo, valida los datos, y realiza la inserción masiva en la base de datos.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -106,12 +114,22 @@ namespace swCargaMasivaIngresos.Services
 			return resultado;
 		}
 
+		/// <summary>
+		/// Marca un error en el resultado del proceso, incrementando el contador de registros fallidos y agregando un mensaje detallado del error.
+		/// </summary>
+		/// <param name="res"></param>
+		/// <param name="linea"></param>
+		/// <param name="msg"></param>
 		private void MarcarError(ResultadoProceso res, int linea, string msg)
 		{
 			res.RegistrosFallidos++;
 			res.ErroresDetalle.Add($"Fila {linea}: {msg}");
 		}
 
+		/// <summary>
+		/// Método privado que crea la estructura de un DataTable para almacenar temporalmente los datos de reducciones antes de ser insertados en la base de datos. Define las columnas necesarias y sus tipos de datos.
+		/// </summary>
+		/// <returns></returns>
 		private DataTable CrearEstructuraReducciones()
 		{
 			var tabla = new DataTable();
@@ -124,6 +142,11 @@ namespace swCargaMasivaIngresos.Services
 			return tabla;
 		}
 
+		/// <summary>
+		/// Método privado que realiza la inserción masiva de un lote de datos en la base de datos utilizando SqlBulkCopy. Después de insertar los datos, llama a un procedimiento almacenado para procesar el merge de reducciones.
+		/// </summary>
+		/// <param name="lote"></param>
+		/// <param name="param"></param>
 		private void InsertarLoteEnBD(DataTable lote, ParametrosCarga param)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))

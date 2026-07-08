@@ -15,6 +15,12 @@ namespace swCargaMasivaIngresos.Services
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+		/// <summary>
+		/// Método principal para procesar un archivo de pagos. Este método realiza los siguientes pasos:
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -120,6 +126,10 @@ namespace swCargaMasivaIngresos.Services
 			return resultadoFinal;
 		}
 
+		/// <summary>
+		/// Método privado que crea la estructura de un DataTable para almacenar los datos crudos de pagos antes de ser procesados. Este DataTable contiene las columnas necesarias para representar la información de pagos, incluyendo ClaveMunicipio, TipoPredio, CuentaPredial, ClasePago, Bimestre, ImpuestoDeterminado, FechaVigencia y FolioCarga.
+		/// </summary>
+		/// <returns></returns>
 		private DataTable CrearEstructuraRaw()
 		{
 			DataTable dt = new DataTable();
@@ -134,6 +144,10 @@ namespace swCargaMasivaIngresos.Services
 			return dt;
 		}
 
+		/// <summary>
+		/// Método privado que realiza la inserción masiva de un DataTable en la base de datos utilizando SqlBulkCopy. Este método también ejecuta un procedimiento almacenado para procesar los datos insertados. Antes de la inserción, se realizan ajustes en los valores de las columnas para asegurar que no haya valores nulos o vacíos donde no deberían estar.
+		/// </summary>
+		/// <param name="lote"></param>
 		private void InsertarBulk(DataTable lote)
 		{
 			foreach (DataRow row in lote.Rows)

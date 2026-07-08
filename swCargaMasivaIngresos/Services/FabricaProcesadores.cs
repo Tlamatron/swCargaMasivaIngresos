@@ -8,6 +8,13 @@ namespace swCargaMasivaIngresos.Services
 	/// </summary>
 	public static class FabricaProcesadores
 	{
+		/// <summary>
+		/// Permite obtener el procesador adecuado según el tipo de carga y la extensión del archivo.
+		/// </summary>
+		/// <param name="tipoCargaId"></param>
+		/// <param name="extension"></param>
+		/// <returns></returns>
+		/// <exception cref="NotSupportedException"></exception>
 		public static IProcesadorFormato ObtenerProcesador(int tipoCargaId, string extension)
 		{
 			string ext = extension.ToLower().Trim();

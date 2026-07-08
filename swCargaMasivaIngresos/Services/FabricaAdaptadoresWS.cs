@@ -6,6 +6,9 @@ using System.Web;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Clase fábrica que devuelve el adaptador de web service correspondiente según el municipio (oficinaId). Permite desacoplar la lógica de negocio de la implementación específica de cada municipio, facilitando la extensión y mantenimiento del código.
+	/// </summary>
 	public static class FabricaAdaptadoresWS
 	{
 		public static IMunicipioAdapter ObtenerAdaptador(int oficinaId)

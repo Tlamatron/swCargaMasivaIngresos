@@ -4,13 +4,18 @@ using System.Data.SqlClient;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Clase de servicio para el control de cargas masivas. Esta clase proporciona métodos para generar folios, registrar inicios de carga y actualizar estatus de cargas en la base de datos mediante procedimientos almacenados.
+	/// </summary>
 	public static class ControlCargasService
 	{
 		private static readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
-		// =========================================================================
-		// NUEVO MÉTODO: Generar el Folio usando el SP con parámetro OUTPUT
-		// =========================================================================
+		/// <summary>
+		/// Genera un nuevo folio para una carga masiva en la base de datos. Este método llama al procedimiento almacenado 'sp_GenerarFolio' y devuelve el folio generado como un entero.
+		/// </summary>
+		/// <param name="idTipoFolio"></param>
+		/// <returns></returns>
 		public static int GenerarFolio(int idTipoFolio)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
@@ -52,6 +57,15 @@ namespace swCargaMasivaIngresos.Services
 				cmd.ExecuteNonQuery();
 			}
 		}
+
+		/// <summary>
+		/// Registra el inicio de una carga masiva en la base de datos. Este método llama al procedimiento almacenado 'sp_RegistrarInicioCarga' y permite opcionalmente especificar un municipio de destino.
+		/// </summary>
+		/// <param name="folioCarga"></param>
+		/// <param name="oficinaId"></param>
+		/// <param name="usuarioLogin"></param>
+		/// <param name="tipoCargaId"></param>
+		/// <param name="claveMunicipioDestino"></param>
 		public static void RegistrarInicio(int folioCarga, int oficinaId, string usuarioLogin, int tipoCargaId, int claveMunicipioDestino = 0)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
@@ -69,6 +83,14 @@ namespace swCargaMasivaIngresos.Services
 			}
 		}
 
+		/// <summary>
+		/// Actualiza el estatus de una carga masiva en la base de datos. Este método llama al procedimiento almacenado 'sp_ActualizarEstatusCarga' y permite especificar el número total de registros exitosos y fallidos, así como un mensaje de detalle opcional.
+		/// </summary>
+		/// <param name="folioCarga"></param>
+		/// <param name="estatus"></param>
+		/// <param name="totalExitosos"></param>
+		/// <param name="totalFallidos"></param>
+		/// <param name="mensajeDetalle"></param>
 		public static void ActualizarEstatus(int folioCarga, string estatus, int totalExitosos = 0, int totalFallidos = 0, string mensajeDetalle = null)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))

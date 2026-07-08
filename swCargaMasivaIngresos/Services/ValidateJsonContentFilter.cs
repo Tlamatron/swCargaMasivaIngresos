@@ -11,6 +11,10 @@ namespace swCargaMasivaIngresos.Services
 	/// </summary>
 	public class ValidateJsonContentFilter : ActionFilterAttribute
 	{
+		/// <summary>
+		/// Método que se ejecuta antes de la acción del controlador. Valida el Content-Type de las solicitudes POST y PUT, asegurando que sea application/json o multipart/form-data. Si no cumple con estas condiciones, devuelve un error 415 Unsupported Media Type.
+		/// </summary>
+		/// <param name="actionContext"></param>
 		public override void OnActionExecuting(HttpActionContext actionContext)
 		{
 			if (actionContext.Request.Method == HttpMethod.Get)

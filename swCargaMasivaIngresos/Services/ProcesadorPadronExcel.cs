@@ -9,10 +9,19 @@ using System.Linq;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Clase ProcesadorPadronExcel que implementa la interfaz IProcesadorFormato. Este procesador se encarga de leer archivos Excel que contienen datos de padrón, mapearlos, limpiarlos y validarlos, y finalmente insertar los registros válidos en la base de datos mediante una operación de inserción masiva.
+	/// </summary>
 	public class ProcesadorPadronExcel : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+		/// <summary>
+		/// Método Procesar que recibe la ruta del archivo Excel y los parámetros de carga, y realiza la lectura, mapeo, limpieza, validación e inserción de los datos en la base de datos.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -93,6 +102,10 @@ namespace swCargaMasivaIngresos.Services
 			return resultadoFinal;
 		}
 
+		/// <summary>
+		/// Método privado que crea la estructura de un DataTable para almacenar temporalmente los datos del padrón antes de ser insertados en la base de datos. Define las columnas necesarias y sus tipos de datos.
+		/// </summary>
+		/// <returns></returns>
 		private DataTable CrearEstructuraPadron()
 		{
 			DataTable tabla = new DataTable();
@@ -107,6 +120,10 @@ namespace swCargaMasivaIngresos.Services
 			return tabla;
 		}
 
+		/// <summary>
+		/// Método privado que realiza la inserción masiva de los registros válidos del padrón en la base de datos utilizando SqlBulkCopy. Se asegura de mapear correctamente las columnas del DataTable a las columnas de la tabla de destino en la base de datos.
+		/// </summary>
+		/// <param name="lote"></param>
 		private void InsertarBulkPadron(DataTable lote)
 		{
 			foreach (DataRow row in lote.Rows)
