@@ -164,8 +164,56 @@ namespace swCargaMasivaIngresos.Services
 		{
 			foreach (DataRow row in lote.Rows)
 			{
+				// Regla de nulos que acordamos para consolidación
+				if (row["ImpuestoDeterminado"] == DBNull.Value || string.IsNullOrWhiteSpace(row["ImpuestoDeterminado"]?.ToString()))
+				{
+					row["ImpuestoDeterminado"] = DBNull.Value;
+				}
+
+				if (row["Bimestre"] != DBNull.Value && string.IsNullOrWhiteSpace(row["Bimestre"].ToString())) row["Bimestre"] = "0";
+				if (row["ClasePago"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ClasePago"].ToString())) row["ClasePago"] = "1";
+			}
+
+			using (SqlConnection conn = new SqlConnection(CadenaConexion))
+			{
+				conn.Open();
+				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
+				{
+					// 🚀 CORRECCIÓN: Apuntamos a la tabla de Pagos, NO a la de Padrón
+					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
+					bulkCopy.BatchSize = 10000;
+					bulkCopy.BulkCopyTimeout = 120;
+
+					// Mapeo exclusivo de Pagos
+					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
+					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
+					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
+					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
+					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
+					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
+					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
+
+					bulkCopy.WriteToServer(lote);
+				}
+
+				// 🚀 CORRECCIÓN: Debemos disparar el SP de etiquetados, no el de padrón
+				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
+				{
+					cmd.CommandType = CommandType.StoredProcedure;
+					cmd.CommandTimeout = 180;
+					// Suponiendo que le pasas param.FolioCarga, asegúrate de recibir 'param' en el método InsertarBulk
+					cmd.Parameters.AddWithValue("@FolioCarga", Convert.ToInt32(lote.Rows[0]["FolioCarga"]));
+					cmd.ExecuteNonQuery();
+				}
+			}
+		}
+
+
+		private void InsertarBulk_v01(DataTable lote)
+		{
+			foreach (DataRow row in lote.Rows)
+			{
 				if (row["FechaVigencia"] != DBNull.Value && string.IsNullOrWhiteSpace(row["FechaVigencia"].ToString())) row["FechaVigencia"] = DBNull.Value;
-				//if (row["ImpuestoDeterminado"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ImpuestoDeterminado"].ToString())) row["ImpuestoDeterminado"] = "0";
 				if (row["ImpuestoDeterminado"] == DBNull.Value || string.IsNullOrWhiteSpace(row["ImpuestoDeterminado"]?.ToString()))
 				{
 					row["ImpuestoDeterminado"] = DBNull.Value;
