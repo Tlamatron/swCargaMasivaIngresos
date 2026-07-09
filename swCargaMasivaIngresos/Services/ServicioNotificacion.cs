@@ -59,12 +59,21 @@ namespace swCargaMasivaIngresos.Services
 							if (!string.IsNullOrWhiteSpace(correoDesarrollo)) mensaje.Bcc.Add(new MailAddress(correoDesarrollo));
 						}
 
-						mensaje.Subject = $"Resultados de Carga Masiva - Folio: {parametros.FolioCarga}";
+						//mensaje.Subject = $"Resultados de Carga Masiva - Folio: {parametros.FolioCarga}";
+						string tituloMpio = parametros.ClaveMunicipioDestino > 0 ? $" [Mpio: {parametros.ClaveMunicipioDestino}]" : "";
+						mensaje.Subject = $"Resultados de Carga Masiva - Folio: {parametros.FolioCarga}{tituloMpio}";
 						mensaje.IsBodyHtml = true;
 
 						StringBuilder sbBody = new StringBuilder();
 						sbBody.AppendLine("<h2>Reporte de Carga de Archivo</h2>");
 						sbBody.AppendLine($"<p>Estimado usuario de la oficina <b>{parametros.OficinaId}</b>,</p>");
+
+						// 🚀 NUEVO: Agregamos el Municipio si viene en los parámetros
+						if (parametros.ClaveMunicipioDestino > 0)
+						{
+							sbBody.AppendLine($"<p><b>Municipio destino procesado:</b> Clave {parametros.ClaveMunicipioDestino}</p>");
+						}
+
 						sbBody.AppendLine($"<p>Le notificamos que el proceso de su archivo (Folio: <b>{parametros.FolioCarga}</b>) ha finalizado.</p>");
 
 						// =========================================================================
