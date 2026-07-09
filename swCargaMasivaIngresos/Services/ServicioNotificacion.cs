@@ -10,12 +10,14 @@ using System.Threading.Tasks;
 namespace swCargaMasivaIngresos.Services
 {
 	/// <summary>
-	/// Clase ServicioNotificacion que se encarga de enviar correos electrónicos de notificación a los usuarios después de procesar un archivo de carga masiva. El correo incluye un resumen del resultado del proceso, así como un archivo CSV adjunto con los registros rechazados si los hay.
+	/// Clase de servicio responsable de enviar notificaciones por correo electrónico a los usuarios después de procesar una carga masiva. Se encarga de construir el contenido del correo, adjuntar archivos CSV con errores si es necesario y manejar reintentos en caso de fallos en el envío SMTP. Además, notifica a los administradores si el correo hacia el usuario final falla tras varios intentos.
 	/// </summary>
 	public static class ServicioNotificacion
 	{
+		private static readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
+
 		/// <summary>
-		/// Método que envía un correo electrónico de notificación al usuario después de procesar un archivo de carga masiva. El correo incluye un resumen del resultado del proceso y, si hay registros rechazados, se adjunta un archivo CSV con los detalles de los errores.
+		/// Envía un correo de notificación al usuario después de procesar una carga masiva, incluyendo detalles del resultado y adjuntando un archivo CSV con los registros rechazados si es necesario. Implementa reintentos en caso de fallos en el envío SMTP y notifica a los administradores si el correo hacia el usuario final falla tras varios intentos.
 		/// </summary>
 		/// <param name="parametros"></param>
 		/// <param name="resultado"></param>
@@ -59,7 +61,7 @@ namespace swCargaMasivaIngresos.Services
 							if (!string.IsNullOrWhiteSpace(correoDesarrollo)) mensaje.Bcc.Add(new MailAddress(correoDesarrollo));
 						}
 
-						//mensaje.Subject = $"Resultados de Carga Masiva - Folio: {parametros.FolioCarga}";
+						// 🚀 Agregamos el identificador del Municipio al ASUNTO (Como lo platicamos antes)
 						string tituloMpio = parametros.ClaveMunicipioDestino > 0 ? $" [Mpio: {parametros.ClaveMunicipioDestino}]" : "";
 						mensaje.Subject = $"Resultados de Carga Masiva - Folio: {parametros.FolioCarga}{tituloMpio}";
 						mensaje.IsBodyHtml = true;
@@ -68,7 +70,7 @@ namespace swCargaMasivaIngresos.Services
 						sbBody.AppendLine("<h2>Reporte de Carga de Archivo</h2>");
 						sbBody.AppendLine($"<p>Estimado usuario de la oficina <b>{parametros.OficinaId}</b>,</p>");
 
-						// 🚀 NUEVO: Agregamos el Municipio si viene en los parámetros
+						// 🚀 Agregamos el Municipio al CUERPO del correo
 						if (parametros.ClaveMunicipioDestino > 0)
 						{
 							sbBody.AppendLine($"<p><b>Municipio destino procesado:</b> Clave {parametros.ClaveMunicipioDestino}</p>");
@@ -77,7 +79,7 @@ namespace swCargaMasivaIngresos.Services
 						sbBody.AppendLine($"<p>Le notificamos que el proceso de su archivo (Folio: <b>{parametros.FolioCarga}</b>) ha finalizado.</p>");
 
 						// =========================================================================
-						// 🚀 DETECCIÓN VISUAL DE ERROR FATAL
+						// DETECCIÓN VISUAL DE ERROR FATAL
 						// =========================================================================
 						bool esErrorFatal = resultado.RegistrosExitosos == 0 && resultado.TablaRechazados == null && resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0;
 
@@ -92,14 +94,14 @@ namespace swCargaMasivaIngresos.Services
 						}
 						else
 						{
-							// EL FLUJO NORMAL (Si sí leyó el archivo)
+							// EL FLUJO NORMAL
 							sbBody.AppendLine("<h3>Resumen:</h3>");
 							sbBody.AppendLine("<ul>");
 							sbBody.AppendLine($"<li><b>Registros insertados exitosamente:</b> <span style='color:green'>{resultado.RegistrosExitosos}</span></li>");
 							sbBody.AppendLine($"<li><b>Registros rechazados (Error de formato):</b> <span style='color:red'>{resultado.RegistrosFallidos}</span></li>");
 							sbBody.AppendLine("</ul>");
 
-							// LÓGICA DE EXPORTACIÓN A CSV (Tu código original intacto)
+							// LÓGICA DE EXPORTACIÓN A CSV
 							if (resultado.RegistrosFallidos > 0)
 							{
 								sbBody.AppendLine("<h3>Detalle de Errores Encontrados:</h3>");
@@ -144,27 +146,115 @@ namespace swCargaMasivaIngresos.Services
 
 						mensaje.Body = sbBody.ToString();
 
-						await clienteSmtp.SendMailAsync(mensaje);
+						// =========================================================================
+						// 🚀 NUEVO: LÓGICA DE REINTENTOS (EXPONENTIAL BACKOFF)
+						// =========================================================================
+						int maxIntentos = 3;
+						int intentoActual = 0;
+						bool enviado = false;
+
+						while (intentoActual < maxIntentos && !enviado)
+						{
+							try
+							{
+								intentoActual++;
+								await clienteSmtp.SendMailAsync(mensaje);
+								enviado = true; // Si no lanza excepción, se envió correctamente
+
+								if (intentoActual > 1)
+								{
+									await LogService.WriteLogAsync("INFO", parametros.UsuarioLogin, "ServicioNotificacion", $"[Folio: {parametros.FolioCarga}] El correo se envió exitosamente en el intento {intentoActual}.");
+								}
+							}
+							catch (Exception exSmtp)
+							{
+								await LogService.WriteLogAsync("WARN", parametros.UsuarioLogin, "ServicioNotificacion", $"[Folio: {parametros.FolioCarga}] Fallo en intento {intentoActual} al enviar correo SMTP. Detalle: {exSmtp.Message}");
+
+								if (intentoActual >= maxIntentos)
+								{
+									// Se agotaron los intentos, lanzamos la alerta a Soporte
+									await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "ServicioNotificacion", $"[Folio: {parametros.FolioCarga}] ERROR CRÍTICO: No se pudo enviar el correo a {correoUsuario} tras {maxIntentos} intentos.");
+									await NotificarFalloCriticoASoporte(parametros, correoUsuario, exSmtp.Message);
+								}
+								else
+								{
+									// Esperamos de forma asíncrona antes del siguiente intento (3s, 6s)
+									await Task.Delay(3000 * intentoActual);
+								}
+							}
+						}
 					}
 				}
 			}
 			catch (Exception ex)
 			{
-				await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "ServicioNotificacion", $"[Folio: {parametros.FolioCarga}] ERROR NOTIFICACIÓN: Falló el envío de correo a {correoUsuario}. Detalle: {ex.Message}");
+				// Atrapa cualquier otro error antes de intentar enviar (ej. Fallo armando el CSV)
+				await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "ServicioNotificacion", $"[Folio: {parametros.FolioCarga}] ERROR INTERNO DE NOTIFICACIÓN: {ex.Message}");
 			}
 		}
 
 		/// <summary>
-		/// Escapa correctamente los textos para que las comas (,) o saltos de línea internos no rompan las columnas en Excel.
+		/// 🚀 NUEVO MÉTODO: Envía una alerta a los administradores si el correo hacia el usuario final falla por problemas de red/SMTP.
 		/// </summary>
+		private static async Task NotificarFalloCriticoASoporte(ParametrosCarga parametros, string correoDestinoFallido, string errorSmtp)
+		{
+			try
+			{
+				string smtpHost = System.Configuration.ConfigurationManager.AppSettings["HostRemitente"];
+				int smtpPort = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["SmtpPort"] ?? "587");
+				string remitente = System.Configuration.ConfigurationManager.AppSettings["CorreoRemitente"];
+				string smtpPass = System.Configuration.ConfigurationManager.AppSettings["PwdRemitente"];
+				string ambiente = System.Configuration.ConfigurationManager.AppSettings["Ambiente"] ?? "Test";
+
+				using (SmtpClient smtp = new SmtpClient(smtpHost, smtpPort))
+				{
+					smtp.Credentials = new System.Net.NetworkCredential(remitente, smtpPass);
+					smtp.EnableSsl = true;
+
+					using (MailMessage alerta = new MailMessage())
+					{
+						alerta.From = new MailAddress(remitente, "Alerta Sistema Predial");
+
+						// Regla de destinatarios (Estado vs Desarrollo)
+						if (ambiente.Equals("Prod", StringComparison.OrdinalIgnoreCase))
+						{
+							alerta.To.Add("isabel.rugerio@puebla.gob.mx"); // Jefa
+							alerta.CC.Add("tlamatini.ortiz@puebla.gob.mx"); // Tú
+						}
+						else
+						{
+							alerta.To.Add("tlamatini.ortiz@puebla.gob.mx"); // Tú en ambiente Test
+						}
+
+						alerta.Subject = $"🚨 ALERTA URGENTE: Falla en Notificación al Usuario - Folio {parametros.FolioCarga}";
+						alerta.IsBodyHtml = true;
+
+						StringBuilder body = new StringBuilder();
+						body.AppendLine("<h2>Alerta de Sistema: Fallo en entrega de correo SMTP</h2>");
+						body.AppendLine($"<p>El sistema procesó correctamente el archivo <b>Folio {parametros.FolioCarga}</b> del usuario <b>{parametros.UsuarioLogin}</b>.</p>");
+						body.AppendLine($"<p>Sin embargo, el servidor de correos <b>NO pudo enviar el correo de confirmación</b> al destinatario final ({correoDestinoFallido}) después de varios reintentos.</p>");
+						body.AppendLine($"<p><b>Detalle técnico del error SMTP:</b> {errorSmtp}</p>");
+						body.AppendLine("<p>Por favor, revise la tabla de <i>ControlCargas</i> y notifique al usuario manualmente si es necesario.</p>");
+
+						alerta.Body = body.ToString();
+
+						await smtp.SendMailAsync(alerta);
+					}
+				}
+			}
+			catch (Exception exSoporte)
+			{
+				// Si incluso el correo de alerta falla (el internet del servidor se cayó por completo)
+				await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "ServicioNotificacion", $"[Folio: {parametros.FolioCarga}] Fallo catastrófico al intentar notificar a Soporte sobre la caída de SMTP. Detalle: {exSoporte.Message}");
+			}
+		}
+
 		private static string LimpiarParaCsv(string valor)
 		{
 			if (string.IsNullOrEmpty(valor)) return "";
 
-			// Si el texto tiene comas, comillas dobles o saltos de línea, DEBE ir encerrado entre comillas dobles
 			if (valor.Contains(",") || valor.Contains("\"") || valor.Contains("\r") || valor.Contains("\n"))
 			{
-				// Escapamos las comillas internas duplicándolas ("")
 				return $"\"{valor.Replace("\"", "\"\"")}\"";
 			}
 
