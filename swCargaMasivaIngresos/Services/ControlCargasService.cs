@@ -42,22 +42,6 @@ namespace swCargaMasivaIngresos.Services
 			}
 		}
 
-		public static void RegistrarInicio_v01(int folioCarga, int oficinaId, string usuarioLogin, int tipoCargaId)
-		{
-			using (SqlConnection conn = new SqlConnection(CadenaConexion))
-			using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_RegistrarInicioCarga", conn))
-			{
-				cmd.CommandType = CommandType.StoredProcedure;
-				cmd.Parameters.AddWithValue("@FolioCarga", folioCarga);
-				cmd.Parameters.AddWithValue("@OficinaId", oficinaId);
-				cmd.Parameters.AddWithValue("@UsuarioLogin", usuarioLogin);
-				cmd.Parameters.AddWithValue("@TipoCargaId", tipoCargaId);
-
-				conn.Open();
-				cmd.ExecuteNonQuery();
-			}
-		}
-
 		/// <summary>
 		/// Registra el inicio de una carga masiva en la base de datos. Este método llama al procedimiento almacenado 'sp_RegistrarInicioCarga' y permite opcionalmente especificar un municipio de destino.
 		/// </summary>

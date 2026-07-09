@@ -110,70 +110,70 @@ namespace swCargaMasivaIngresos.Services
 			return mapaCrudo;
 		}
 
-		public static Dictionary<string, int> ObtenerMapaPorRegiones_v01(DataTable tabla, out int filaInicioDatos)
-		{
-			filaInicioDatos = -1;
-			int filaEncabezado = -1;
+		//public static Dictionary<string, int> ObtenerMapaPorRegiones_v01(DataTable tabla, out int filaInicioDatos)
+		//{
+		//	filaInicioDatos = -1;
+		//	int filaEncabezado = -1;
 
-			// 1. ZONA A: Encontrar dónde empiezan los títulos reales (Atrapará la Fila 4 de Amixtlán)
-			for (int i = 0; i < Math.Min(50, tabla.Rows.Count); i++)
-			{
-				var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
-				string texto = string.Join(" ", celdas).ToUpper();
+		//	// 1. ZONA A: Encontrar dónde empiezan los títulos reales (Atrapará la Fila 4 de Amixtlán)
+		//	for (int i = 0; i < Math.Min(50, tabla.Rows.Count); i++)
+		//	{
+		//		var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+		//		string texto = string.Join(" ", celdas).ToUpper();
 
-				// Con que tenga Clave, Municipio o Fecha, sabemos que es el inicio del encabezado
-				bool tieneContexto = texto.Contains("CLAVE") || texto.Contains("MUNICIPIO") || texto.Contains("CUENTA") || texto.Contains("PREDIAL") || texto.Contains("FECHA");
+		//		// Con que tenga Clave, Municipio o Fecha, sabemos que es el inicio del encabezado
+		//		bool tieneContexto = texto.Contains("CLAVE") || texto.Contains("MUNICIPIO") || texto.Contains("CUENTA") || texto.Contains("PREDIAL") || texto.Contains("FECHA");
 
-				if (celdas.Count >= 2 && tieneContexto)
-				{
-					filaEncabezado = i;
-					break;
-				}
-			}
+		//		if (celdas.Count >= 2 && tieneContexto)
+		//		{
+		//			filaEncabezado = i;
+		//			break;
+		//		}
+		//	}
 
-			if (filaEncabezado == -1) return new Dictionary<string, int>();
+		//	if (filaEncabezado == -1) return new Dictionary<string, int>();
 
-			// 2. ZONA B: Encontrar inicio de datos (Saltará hasta la Fila 7)
-			filaInicioDatos = filaEncabezado + 1;
-			for (int i = filaEncabezado + 1; i < Math.Min(filaEncabezado + 10, tabla.Rows.Count); i++)
-			{
-				var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
-				string textoUnido = string.Join("", celdas).ToUpper();
+		//	// 2. ZONA B: Encontrar inicio de datos (Saltará hasta la Fila 7)
+		//	filaInicioDatos = filaEncabezado + 1;
+		//	for (int i = filaEncabezado + 1; i < Math.Min(filaEncabezado + 10, tabla.Rows.Count); i++)
+		//	{
+		//		var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
+		//		string textoUnido = string.Join("", celdas).ToUpper();
 
-				if (string.IsNullOrWhiteSpace(textoUnido)) continue;
+		//		if (string.IsNullOrWhiteSpace(textoUnido)) continue;
 
-				// Si la fila tiene cualquiera de estos textos, sigue siendo parte del encabezado
-				if (textoUnido.Contains("BIMESTRAL") || textoUnido.Contains("RUSTICO") || textoUnido.Contains("URBANO") ||
-					textoUnido.Contains("ANUAL") || textoUnido.Contains("BIMESTRE") || textoUnido.Contains("SUBURBANO") ||
-					textoUnido.Contains("PREDIO") || textoUnido.Contains("CUENTA") || textoUnido.Contains("CLASE"))
-				{
-					continue;
-				}
+		//		// Si la fila tiene cualquiera de estos textos, sigue siendo parte del encabezado
+		//		if (textoUnido.Contains("BIMESTRAL") || textoUnido.Contains("RUSTICO") || textoUnido.Contains("URBANO") ||
+		//			textoUnido.Contains("ANUAL") || textoUnido.Contains("BIMESTRE") || textoUnido.Contains("SUBURBANO") ||
+		//			textoUnido.Contains("PREDIO") || textoUnido.Contains("CUENTA") || textoUnido.Contains("CLASE"))
+		//		{
+		//			continue;
+		//		}
 
-				filaInicioDatos = i;
-				break;
-			}
+		//		filaInicioDatos = i;
+		//		break;
+		//	}
 
-			// 3. ZONA C: Extracción Vertical (Fusión de títulos)
-			var mapaCrudo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-			for (int c = 0; c < tabla.Columns.Count; c++)
-			{
-				List<string> partes = new List<string>();
-				for (int r = filaEncabezado; r < filaInicioDatos; r++)
-				{
-					string val = tabla.Rows[r][c]?.ToString().Trim().ToUpper();
-					if (!string.IsNullOrWhiteSpace(val)) partes.Add(val);
-				}
+		//	// 3. ZONA C: Extracción Vertical (Fusión de títulos)
+		//	var mapaCrudo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+		//	for (int c = 0; c < tabla.Columns.Count; c++)
+		//	{
+		//		List<string> partes = new List<string>();
+		//		for (int r = filaEncabezado; r < filaInicioDatos; r++)
+		//		{
+		//			string val = tabla.Rows[r][c]?.ToString().Trim().ToUpper();
+		//			if (!string.IsNullOrWhiteSpace(val)) partes.Add(val);
+		//		}
 
-				if (partes.Count > 0)
-				{
-					string colName = string.Join(" ", partes).Replace("\r", " ").Replace("\n", " ").Replace("  ", " ");
-					if (!mapaCrudo.ContainsKey(colName)) mapaCrudo[colName] = c;
-				}
-			}
+		//		if (partes.Count > 0)
+		//		{
+		//			string colName = string.Join(" ", partes).Replace("\r", " ").Replace("\n", " ").Replace("  ", " ");
+		//			if (!mapaCrudo.ContainsKey(colName)) mapaCrudo[colName] = c;
+		//		}
+		//	}
 
-			return mapaCrudo;
-		}
+		//	return mapaCrudo;
+		//}
 
 		/// <summary>
 		/// Procesa un diccionario de encabezados crudos y genera un mapeo oficial de columnas y bimestres sueltos, asegurando que no haya conflictos entre sinónimos y que las columnas importantes sean reclamadas primero. Este método utiliza una memoria interna para bloquear columnas ya asignadas y evitar que se asignen múltiples sinónimos a la misma columna.
@@ -272,7 +272,22 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		// Mantenemos estos dos para que no se rompa tu procesador TXT (ProcesadorPagosUniversal)
+		/// <summary>
+		/// Método que permite obtener un mapeo de columnas a partir de un DataTable, considerando múltiples filas de encabezado. Este método analiza las filas especificadas y construye un diccionario que asocia los nombres de columna con sus índices correspondientes, permitiendo extraer datos de manera flexible incluso cuando los encabezados están distribuidos en varias filas.
+		/// </summary>
+		/// <param name="tabla"></param>
+		/// <param name="indiceFilaInicio"></param>
+		/// <param name="numFilas"></param>
+		/// <returns></returns>
 		public static Dictionary<string, int> ObtenerMapaColumnasMultiFila(DataTable tabla, int indiceFilaInicio, int numFilas) { return new Dictionary<string, int>(); /* Omitido por brevedad, no lo borres de tu código si lo tienes */ }
+
+		/// <summary>
+		/// Método que permite estandarizar un DataTable crudo utilizando un mapeo de columnas previamente obtenido. Este método crea un nuevo DataTable con las columnas oficiales y copia los datos correspondientes desde el DataTable crudo, asegurando que los datos se alineen correctamente con el mapeo oficial y que se mantenga la integridad de la información.
+		/// </summary>
+		/// <param name="tablaCruda"></param>
+		/// <param name="mapaCrudo"></param>
+		/// <param name="indiceInicioDatos"></param>
+		/// <returns></returns>
 		public static DataTable EstandarizarTabla(DataTable tablaCruda, Dictionary<string, int> mapaCrudo, int indiceInicioDatos = 0) { return new DataTable(); /* Omitido por brevedad, no lo borres */ }
 	}
 }

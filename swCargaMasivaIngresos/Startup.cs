@@ -25,7 +25,14 @@ namespace swCargaMasivaIngresos
 				});
 
 			// 3. Levantar el "Worker" 
-			app.UseHangfireServer();
+			var options = new BackgroundJobServerOptions
+			{
+				// Solo procesará 3 archivos masivos al mismo tiempo como máximo.
+				// Los demás se quedarán en "Enqueued" esperando su turno pacientemente sin saturar SQL.
+				WorkerCount = 3
+			};
+
+			app.UseHangfireServer(options);
 
 			// 4. Levantar el panel de control visual
 			app.UseHangfireDashboard();

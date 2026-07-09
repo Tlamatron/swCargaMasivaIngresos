@@ -39,7 +39,7 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Retorna el valor de configuración correspondiente a la clave especificada desde el archivo de configuración externo. El método intenta primero leerlo como un archivo de configuración completo y, si falla, lo lee como un XML con raíz <appSettings>.
+		/// Retorna el valor de configuración correspondiente a la clave especificada desde el archivo de configuración externo. El método intenta primero leerlo como un archivo de configuración completo y, si falla, lo lee como un XML con raíz appSettings.
 		/// </summary>
 		/// <param name="key"></param>
 		/// <returns></returns>

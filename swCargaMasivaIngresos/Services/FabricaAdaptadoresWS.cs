@@ -11,6 +11,12 @@ namespace swCargaMasivaIngresos.Services
 	/// </summary>
 	public static class FabricaAdaptadoresWS
 	{
+		/// <summary>
+		/// Método que devuelve el adaptador de web service correspondiente según el municipio (oficinaId). Si no existe un adaptador configurado para el municipio, lanza una excepción NotSupportedException.
+		/// </summary>
+		/// <param name="oficinaId"></param>
+		/// <returns></returns>
+		/// <exception cref="NotSupportedException"></exception>
 		public static IMunicipioAdapter ObtenerAdaptador(int oficinaId)
 		{
 			switch (oficinaId)

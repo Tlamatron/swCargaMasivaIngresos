@@ -37,7 +37,9 @@ namespace swCargaMasivaIngresos.Models
 		/// </summary>
 		public int Orden { get; set; }
 
-		// Esta lista nos servirá en el Front-end si en el futuro tenemos sub-menús
+		/// <summary>
+		/// Sección que obtiene o establece la lista de sub-menús asociados al menú actual. Esta propiedad permite crear una estructura jerárquica de menús, donde cada menú puede contener múltiples sub-menús, facilitando la organización y navegación dentro de la aplicación.
+		/// </summary>
 		public List<MenuDTO> SubMenus { get; set; } = new List<MenuDTO>();
 	}
 }

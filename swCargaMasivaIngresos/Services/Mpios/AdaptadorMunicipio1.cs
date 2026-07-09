@@ -15,6 +15,12 @@ namespace swCargaMasivaIngresos.Services.Mpios
 	/// </summary>
 	public class AdaptadorMunicipio1 : IMunicipioAdapter
 	{
+		/// <summary>
+		/// Método que obtiene y mapea los datos del padrón del municipio 1 al formato estándar. Este método realiza una petición HTTP al endpoint del municipio, aplica la autenticación necesaria, deserializa la respuesta y mapea los datos al formato estándar definido por PadronEstandarDTO.
+		/// </summary>
+		/// <param name="config"></param>
+		/// <returns></returns>
+		/// <exception cref="Exception"></exception>
 		public async Task<List<PadronEstandarDTO>> ObtenerYMapearDatosAsync(ConfiguracionWSDTO config)
 		{
 			var listaEstandar = new List<PadronEstandarDTO>();
