@@ -8,9 +8,11 @@ using System.Text;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Clase encargada de procesar archivos de texto plano (TXT) que contienen información de reducciones. Implementa la interfaz IProcesadorFormato y se encarga de validar el layout del archivo, realizar validaciones de negocio, almacenar temporalmente los registros en una tabla en memoria (DataTable) y finalmente insertar los datos en la base de datos utilizando SqlBulkCopy y un procedimiento almacenado para consolidar la información.
+	/// </summary>
 	public class ProcesadorReduccionesTXT : IProcesadorFormato
 	{
-		private readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
@@ -26,6 +28,10 @@ namespace swCargaMasivaIngresos.Services
 				string linea;
 				int numeroLinea = 0;
 
+				int idxMpio = 0, idxTipo = 1, idxCuenta = 2, idxFolio = 3, idxReduccion = 4;
+				bool esPrimerRenglon = true;
+				bool tieneEncabezados = false;
+
 				while ((linea = reader.ReadLine()) != null)
 				{
 					numeroLinea++;
@@ -33,21 +39,82 @@ namespace swCargaMasivaIngresos.Services
 
 					string[] col = linea.Split('|');
 
-					// 1. Validar Layout estricto de 5 columnas
-					if (col.Length != 5)
+					// =================================================================
+					// 🚀 LÓGICA HÍBRIDA (PROPUESTA DEL USUARIO)
+					// =================================================================
+					if (esPrimerRenglon)
 					{
-						MarcarError(resultado, numeroLinea, $"Columnas incorrectas. Se esperaban 5, llegaron {col.Length}.");
+						esPrimerRenglon = false;
+
+						// Evaluamos si es un encabezado (contiene texto descriptivo)
+						if (linea.ToUpper().Contains("MUNICIPIO") || linea.ToUpper().Contains("CLAVE") || linea.ToUpper().Contains("CUENTA"))
+						{
+							tieneEncabezados = true;
+							idxFolio = -1; // Lo apagamos hasta confirmar que existe
+							idxReduccion = -1; // Lo apagamos hasta confirmar que existe
+
+							for (int i = 0; i < col.Length; i++)
+							{
+								string header = col[i].ToUpper();
+								if (header.Contains("MUNICIPIO") || header.Contains("CLAVE")) idxMpio = i;
+								else if (header.Contains("PREDIO")) idxTipo = i;
+								else if (header.Contains("CUENTA")) idxCuenta = i;
+								else if (header.Contains("FOLIO")) idxFolio = i;
+								else if (header.Contains("REDUCCION") || header.Contains("REDUCCIÓN") || header.Contains("TIPO RED")) idxReduccion = i;
+							}
+							continue; // Saltamos esta línea porque solo eran títulos
+						}
+						else
+						{
+							// MODO ESTRICTO (No hay encabezados)
+							if (col.Length == 4)
+							{
+								idxFolio = -1; // Omitieron el folio opcional
+								idxReduccion = 3;
+							}
+							else if (col.Length < 4)
+							{
+								MarcarError(resultado, numeroLinea, "El archivo sin encabezados no cumple con el layout mínimo estricto de 4 columnas.");
+								continue;
+							}
+						}
+					}
+
+					// =================================================================
+					// 1. VALIDACIÓN DE MAPEO
+					// =================================================================
+					if (tieneEncabezados && (idxMpio == -1 || idxTipo == -1 || idxCuenta == -1 || idxReduccion == -1))
+					{
+						MarcarError(resultado, numeroLinea, "El archivo tiene encabezados, pero no se encontraron las columnas obligatorias (Municipio, Predio, Cuenta, Reducción).");
 						continue;
 					}
 
-					// 2. Extraer y limpiar
-					string claveMunicipio = col[0].Trim();
-					string tipoPredio = col[1].Trim();
-					string cuentaPredial = col[2].Trim();
-					string folioUnico = col[3].Trim();
-					string tipoReduccion = col[4].Trim();
+					// Validar que la fila actual tenga la longitud suficiente según nuestro mapeo
+					int maxIndexRequired = Math.Max(idxMpio, Math.Max(idxTipo, Math.Max(idxCuenta, idxReduccion)));
+					if (col.Length <= maxIndexRequired)
+					{
+						MarcarError(resultado, numeroLinea, "La fila no contiene los datos suficientes según la estructura mapeada.");
+						continue;
+					}
 
-					// 3. VALIDACIONES ESTRICTAS DE NEGOCIO
+					// =================================================================
+					// 2. EXTRACCIÓN SEGURA
+					// =================================================================
+					string claveMunicipio = col[idxMpio].Trim();
+					string tipoPredio = col[idxTipo].Trim();
+					string cuentaPredial = col[idxCuenta].Trim();
+					string tipoReduccion = col[idxReduccion].Trim();
+
+					// Extracción opcional del Folio
+					string folioUnico = "";
+					if (idxFolio != -1 && col.Length > idxFolio)
+					{
+						folioUnico = col[idxFolio].Trim();
+					}
+
+					// =================================================================
+					// 3. VALIDACIONES ESTRICTAS DE NEGOCIO (Igual que antes)
+					// =================================================================
 					if (string.IsNullOrEmpty(cuentaPredial))
 					{
 						MarcarError(resultado, numeroLinea, "La Cuenta Predial es obligatoria.");
@@ -56,7 +123,7 @@ namespace swCargaMasivaIngresos.Services
 
 					if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 					{
-						MarcarError(resultado, numeroLinea, "Clave de municipio inválida (1 a 217).");
+						MarcarError(resultado, numeroLinea, $"Clave de municipio '{claveMunicipio}' inválida.");
 						continue;
 					}
 
@@ -68,7 +135,7 @@ namespace swCargaMasivaIngresos.Services
 
 					if (!byte.TryParse(tipoReduccion, out byte tipoRed) || tipoRed < 1)
 					{
-						MarcarError(resultado, numeroLinea, "Tipo de Reducción inválido. Debe ser un número de catálogo válido.");
+						MarcarError(resultado, numeroLinea, "Tipo de Reducción inválido.");
 						continue;
 					}
 
