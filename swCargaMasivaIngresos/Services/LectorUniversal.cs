@@ -116,7 +116,12 @@ namespace swCargaMasivaIngresos.Services
 
 			using (var reader = new StreamReader(rutaArchivo, Encoding.UTF8))
 			{
-				string primeraLinea = reader.ReadLine();
+				string primeraLinea = null;
+				while ((primeraLinea = reader.ReadLine()) != null)
+				{
+					if (!string.IsNullOrWhiteSpace(primeraLinea)) break; // Ya encontró texto
+				}
+
 				if (string.IsNullOrWhiteSpace(primeraLinea))
 					return resultado; // Archivo vacío
 

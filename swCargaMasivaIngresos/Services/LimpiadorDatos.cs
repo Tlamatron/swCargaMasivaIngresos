@@ -149,14 +149,39 @@ namespace swCargaMasivaIngresos.Services
 				// =======================================================================
 				// 🚀 REGLA E: Blindaje Contable de Bimestres
 				// =======================================================================
+				//if (!string.IsNullOrWhiteSpace(bimestre) && bimestre.Contains(","))
+				//{
+				//	bimestre = bimestre.Split(',').Last().Trim(); // "1,2,3" -> "3"
+				//}
+				//if (clasePago == "1" || string.IsNullOrWhiteSpace(bimestre))
+				//{
+				//	bimestre = "0"; // Regla SQL: Si es Anual, el bimestre es 0
+				//}
 				if (!string.IsNullOrWhiteSpace(bimestre) && bimestre.Contains(","))
 				{
 					bimestre = bimestre.Split(',').Last().Trim(); // "1,2,3" -> "3"
 				}
-				if (clasePago == "1" || string.IsNullOrWhiteSpace(bimestre))
+
+				// Implementación de la Regla de Negocio (Anual vs Bimestral)
+				if (clasePago == "1")
 				{
-					bimestre = "0"; // Regla SQL: Si es Anual, el bimestre es 0
+					// Si es Anual, NO IMPORTA si omitieron la columna de bimestre, siempre será 0
+					bimestre = "0";
 				}
+				else if (clasePago == "2")
+				{
+					// Si es Bimestral, la columna es obligatoria. Si no viene o viene en 0, es un error.
+					if (string.IsNullOrWhiteSpace(bimestre) || bimestre == "0")
+					{
+						erroresFila.Add("El pago es Bimestral (Clase 2) pero no se indicó el Bimestre pagado.");
+					}
+				}
+				else if (string.IsNullOrWhiteSpace(bimestre))
+				{
+					// Fallback de seguridad por si omitieron tanto clase como bimestre
+					bimestre = "0";
+				}
+
 
 				// =======================================================================
 				// 🛑 ADUANA FINAL DE VALIDACIÓN
