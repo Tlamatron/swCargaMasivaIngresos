@@ -43,6 +43,9 @@ namespace swCargaMasivaIngresos.Services
 				var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 				DataTable tablaCrudos = CrearEstructuraRaw();
 
+				// 🚀 1. EL HASHSET VA AFUERA DEL CICLO (Para que tenga memoria global)
+				HashSet<string> pagosProcesados = new HashSet<string>();
+
 				for (int i = filaInicioDatos; i < tablaTXT.Rows.Count; i++)
 				{
 					var fila = tablaTXT.Rows[i];
@@ -92,14 +95,28 @@ namespace swCargaMasivaIngresos.Services
 						fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
 					}
 
+					// 🚀 2. FILTRO ANTI-DUPLICADOS EN MEMORIA (Con Registro de Error)
+					string llaveUnica = $"{claveMunicipio}-{tipoPredio}-{cuentaPredial}-{bimestre}";
+					if (pagosProcesados.Contains(llaveUnica))
+					{
+						// Registramos el fallo para que salga en el correo
+						resultadoFinal.RegistrosFallidos++;
+						resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El pago de la cuenta {cuentaPredial} para el bimestre {bimestre} está duplicado en el archivo.");
+
+						continue; // Ahora sí, saltamos el registro para proteger la base de datos
+					}
+					pagosProcesados.Add(llaveUnica);
+
+					// 🚀 3. LLENADO CORRECTO DE LA FILA CRUDA
 					DataRow nuevaFila = tablaCrudos.NewRow();
 					nuevaFila["ClaveMunicipio"] = claveMunicipio;
 					nuevaFila["TipoPredio"] = tipoPredio;
 					nuevaFila["CuentaPredial"] = cuentaPredial;
 					nuevaFila["ClasePago"] = clasePago;
 					nuevaFila["Bimestre"] = bimestre;
-					nuevaFila["ImpuestoDeterminado"] = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "");
+					nuevaFila["ImpuestoDeterminado"] = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0");
 					nuevaFila["FechaVigencia"] = fechaVigencia;
+					nuevaFila["FolioCarga"] = param.FolioCarga.ToString(); // <-- ESTA LÍNEA ES VITAL PARA EL SQLBULKCOPY
 
 					tablaCrudos.Rows.Add(nuevaFila);
 				}

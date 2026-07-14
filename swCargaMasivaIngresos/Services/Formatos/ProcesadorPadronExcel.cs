@@ -53,6 +53,8 @@ namespace swCargaMasivaIngresos.Services
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraPadronCompleta();
 
+						HashSet<string> cuentasProcesadas = new HashSet<string>();
+
 						// 🚀 2. EXTRACCIÓN
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
@@ -107,6 +109,15 @@ namespace swCargaMasivaIngresos.Services
 							{
 								fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
 							}
+
+							string llaveUnica = $"{claveMunicipio}-{tipoPredio}-{cuentaPredial}";
+							if (cuentasProcesadas.Contains(llaveUnica))
+							{
+								resultadoFinal.RegistrosFallidos++;
+								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El predio con cuenta {cuentaPredial} viene repetido en el archivo.");
+								continue;
+							}
+							cuentasProcesadas.Add(llaveUnica);
 
 							// 🚀 2. LLENADO DE LA TABLA (Con extracción segura de las 24 columnas)
 							DataRow nuevaFila = tablaCrudos.NewRow();
