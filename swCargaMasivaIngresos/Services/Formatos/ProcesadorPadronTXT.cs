@@ -34,21 +34,37 @@ namespace swCargaMasivaIngresos.Services
 				string linea;
 				int numeroLinea = 0;
 
+				// 🚀 VARIABLES PARA DETECCIÓN DINÁMICA
+				char delimitador = '|'; // Pipe por defecto
+				bool delimitadorDetectado = false;
+
 				while ((linea = reader.ReadLine()) != null)
 				{
 					numeroLinea++;
 					if (string.IsNullOrWhiteSpace(linea)) continue;
 
-					string[] col = linea.Split('|');
+					// 🚀 DETECCIÓN DEL DELIMITADOR (Solo se ejecuta en la primera línea válida)
+					if (!delimitadorDetectado)
+					{
+						if (linea.Contains("|")) delimitador = '|';
+						else if (linea.Contains(",")) delimitador = ',';
+						else if (linea.Contains("\t")) delimitador = '\t';
+
+						delimitadorDetectado = true;
+						LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT", $"Delimitador detectado automáticamente: '{delimitador}'").Wait();
+					}
+
+					// Partimos la línea usando el delimitador que el sistema descubrió
+					string[] col = linea.Split(delimitador);
 
 					// 1. Validar Layout estricto de 24 columnas
 					if (col.Length != 24)
 					{
-						MarcarError(resultado, numeroLinea, $"Columnas incorrectas. Se esperaban 24, llegaron {col.Length}.");
+						MarcarError(resultado, numeroLinea, $"Columnas incorrectas. Se esperaban 24, llegaron {col.Length} usando el separador '{delimitador}'.");
 						continue;
 					}
 
-					// Extraemos los componentes clave
+					// Extraemos los componentes clave (El resto del código se queda exactamente igual)
 					string claveMunicipio = col[0].Trim();
 					string tipoPredio = col[1].Trim();
 					string cuentaPredial = col[2].Trim();
