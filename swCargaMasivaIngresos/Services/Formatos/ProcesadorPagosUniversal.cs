@@ -9,14 +9,14 @@ using System.Linq;
 namespace swCargaMasivaIngresos.Services
 {
 	/// <summary>
-	/// Procesador de pagos universal que implementa la interfaz IProcesadorFormato. Este procesador realiza la lectura, mapeo, limpieza y validación de archivos de pagos, y luego inserta los datos válidos en la base de datos mediante una operación de inserción masiva.
+	/// Clase encargada de procesar archivos de pagos en formato TXT o CSV de manera universal. Esta clase implementa la interfaz IProcesadorFormato y proporciona métodos para leer, mapear, limpiar y validar los datos del archivo, así como para insertar los registros válidos en la base de datos mediante operaciones bulk y procedimientos almacenados.
 	/// </summary>
 	public class ProcesadorPagosUniversal : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
-		/// Método principal para procesar un archivo de pagos. Este método realiza los siguientes pasos:
+		/// Método principal para procesar un archivo de pagos en formato TXT o CSV. Este método realiza la lectura del archivo, mapea los encabezados, limpia y valida los datos, y finalmente inserta los registros válidos en la base de datos.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <param name="param"></param>
@@ -29,14 +29,11 @@ namespace swCargaMasivaIngresos.Services
 
 			try
 			{
-				// 1. Convertimos el TXT/CSV a un DataTable usando tu Lector Universal
 				var resultadoLectura = LectorUniversal.LeerArchivo(rutaArchivo, Path.GetExtension(rutaArchivo));
 				DataTable tablaTXT = resultadoLectura.TablaCruda;
 
-				if (tablaTXT == null || tablaTXT.Rows.Count == 0)
-					return resultadoFinal;
+				if (tablaTXT == null || tablaTXT.Rows.Count == 0) return resultadoFinal;
 
-				// 🚀 2. REUTILIZAMOS EL MOTOR DE REGIONES (¡Funciona igual para TXT!)
 				int filaInicioDatos;
 				var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(tablaTXT, out filaInicioDatos);
 
@@ -44,54 +41,55 @@ namespace swCargaMasivaIngresos.Services
 					throw new Exception("No se encontraron encabezados válidos en el archivo TXT/CSV.");
 
 				var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
-				// 🚀 CANDADO FINANCIERO 1: Exigir la columna de pago
-				//if (!mapaBloqueado.Columnas.ContainsKey("ImpuestoDeterminado"))
-				//{
-				//	throw new Exception("El archivo carece de una columna identificable para el Monto/Pago (Ej. PAGO, IMPORTE, TOTAL, IMPUESTO). Al ser una carga de Pagos, este dato es estrictamente obligatorio.");
-				//}
 				DataTable tablaCrudos = CrearEstructuraRaw();
 
-				// 🚀 3. EL PRE-LAVADO BLINDADO (Idéntico a Excel)
 				for (int i = filaInicioDatos; i < tablaTXT.Rows.Count; i++)
 				{
 					var fila = tablaTXT.Rows[i];
-
 					if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 
-					string cuentaPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "CuentaPredial");
+					// 🚀 EXTRACCIÓN SEGURA
+					string cuentaPredial = ExtraerSeguro(fila, mapaBloqueado, "CuentaPredial", "");
 					if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 					if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
 
-					string anioPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio");
+					string anioPredial = ExtraerSeguro(fila, mapaBloqueado, "Anio", "");
 					if (string.IsNullOrWhiteSpace(anioPredial)) anioPredial = DateTime.Now.Year.ToString();
 					if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
 
-					string tipoPredio = MapeadorInteligente.Extraer(fila, mapaBloqueado, "TipoPredio").ToUpper().Trim();
+					string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
 					if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
-					else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO")) tipoPredio = "2";
-					else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO")) tipoPredio = "3";
+					else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
+					else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
 					if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
-					string clasePago = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClasePago");
-					if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "1";
-
+					string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "1");
 					string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
 					if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "0";
 
-					string claveMunicipio = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClaveMunicipio");
+					string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
 					if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
 					{
 						claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
 					}
 
-					string fechaVigencia = MapeadorInteligente.Extraer(fila, mapaBloqueado, "FechaVigencia").Trim();
-					if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
+					// 🚀 FALLBACK LÓGICO DE FECHAS
+					string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
+					if (string.IsNullOrWhiteSpace(fechaVigencia))
+					{
+						fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+					}
+					else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
 					{
 						fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
 					}
 					else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
 					{
 						fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
+					}
+					else
+					{
+						fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
 					}
 
 					DataRow nuevaFila = tablaCrudos.NewRow();
@@ -100,7 +98,7 @@ namespace swCargaMasivaIngresos.Services
 					nuevaFila["CuentaPredial"] = cuentaPredial;
 					nuevaFila["ClasePago"] = clasePago;
 					nuevaFila["Bimestre"] = bimestre;
-					nuevaFila["ImpuestoDeterminado"] = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ImpuestoDeterminado");
+					nuevaFila["ImpuestoDeterminado"] = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "");
 					nuevaFila["FechaVigencia"] = fechaVigencia;
 
 					tablaCrudos.Rows.Add(nuevaFila);
@@ -110,7 +108,7 @@ namespace swCargaMasivaIngresos.Services
 
 				if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 				{
-					InsertarBulk(resultadoLimpieza.TablaValidos);
+					InsertarBulk(resultadoLimpieza.TablaValidos, param);
 				}
 
 				resultadoFinal.RegistrosExitosos += resultadoLimpieza.TablaValidos.Rows.Count;
@@ -127,7 +125,28 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Método privado que crea la estructura de un DataTable para almacenar los datos crudos de pagos antes de ser procesados. Este DataTable contiene las columnas necesarias para representar la información de pagos, incluyendo ClaveMunicipio, TipoPredio, CuentaPredial, ClasePago, Bimestre, ImpuestoDeterminado, FechaVigencia y FolioCarga.
+		/// Método auxiliar para extraer valores de una fila de datos de manera segura, manejando posibles excepciones y proporcionando un valor por defecto en caso de error o valor nulo.
+		/// </summary>
+		/// <param name="fila"></param>
+		/// <param name="mapa"></param>
+		/// <param name="columna"></param>
+		/// <param name="valorPorDefecto"></param>
+		/// <returns></returns>
+		private string ExtraerSeguro(DataRow fila, MapeadorInteligente.MapaOficial mapa, string columna, string valorPorDefecto = "")
+		{
+			try
+			{
+				string valor = MapeadorInteligente.Extraer(fila, mapa, columna);
+				return string.IsNullOrWhiteSpace(valor) ? valorPorDefecto : valor.Trim();
+			}
+			catch
+			{
+				return valorPorDefecto;
+			}
+		}
+
+		/// <summary>
+		/// Método que crea y devuelve la estructura de un DataTable para almacenar temporalmente los datos crudos del archivo TXT/CSV antes de ser procesados e insertados en la base de datos. La estructura incluye columnas como ClaveMunicipio, TipoPredio, CuentaPredial, ClasePago, Bimestre, ImpuestoDeterminado, FechaVigencia y FolioCarga.
 		/// </summary>
 		/// <returns></returns>
 		private DataTable CrearEstructuraRaw()
@@ -145,27 +164,17 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Método privado que realiza la inserción masiva de un DataTable en la base de datos utilizando SqlBulkCopy. Este método también ejecuta un procedimiento almacenado para procesar los datos insertados. Antes de la inserción, se realizan ajustes en los valores de las columnas para asegurar que no haya valores nulos o vacíos donde no deberían estar.
+		/// Método que realiza la inserción masiva de registros válidos en la base de datos utilizando SqlBulkCopy y posteriormente llama a un procedimiento almacenado para procesar los datos insertados. Este método asegura que los datos se transfieran de manera eficiente y segura a la tabla de staging correspondiente.
 		/// </summary>
 		/// <param name="lote"></param>
-		private void InsertarBulk(DataTable lote)
+		/// <param name="param"></param>
+		private void InsertarBulk(DataTable lote, ParametrosCarga param)
 		{
-			foreach (DataRow row in lote.Rows)
-			{
-				if (row["ImpuestoDeterminado"] == DBNull.Value || string.IsNullOrWhiteSpace(row["ImpuestoDeterminado"]?.ToString()))
-				{
-					row["ImpuestoDeterminado"] = DBNull.Value;
-				}
-				if (row["Bimestre"] != DBNull.Value && string.IsNullOrWhiteSpace(row["Bimestre"].ToString())) row["Bimestre"] = "0";
-				if (row["ClasePago"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ClasePago"].ToString())) row["ClasePago"] = "1";
-			}
-
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
 				conn.Open();
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					// 🚀 CORRECCIÓN VITAL AQUÍ
 					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
 					bulkCopy.BatchSize = 10000;
 					bulkCopy.BulkCopyTimeout = 120;
@@ -185,46 +194,8 @@ namespace swCargaMasivaIngresos.Services
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;
-					cmd.Parameters.AddWithValue("@FolioCarga", Convert.ToInt32(lote.Rows[0]["FolioCarga"]));
+					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
 					cmd.ExecuteNonQuery();
-				}
-			}
-		}
-
-		private void InsertarBulk_v01(DataTable lote)
-		{
-			foreach (DataRow row in lote.Rows)
-			{
-				if (row["FechaVigencia"] != DBNull.Value && string.IsNullOrWhiteSpace(row["FechaVigencia"].ToString())) row["FechaVigencia"] = DBNull.Value;
-				//if (row["ImpuestoDeterminado"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ImpuestoDeterminado"].ToString())) row["ImpuestoDeterminado"] = "0";
-				if (row["ImpuestoDeterminado"] == DBNull.Value || string.IsNullOrWhiteSpace(row["ImpuestoDeterminado"]?.ToString()))
-				{
-					row["ImpuestoDeterminado"] = DBNull.Value;
-				}
-				if (row["Bimestre"] != DBNull.Value && string.IsNullOrWhiteSpace(row["Bimestre"].ToString())) row["Bimestre"] = "0";
-				if (row["ClasePago"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ClasePago"].ToString())) row["ClasePago"] = "1";
-			}
-
-			using (SqlConnection conn = new SqlConnection(CadenaConexion))
-			{
-				conn.Open();
-				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
-				{
-					// 🚀 ALINEACIÓN DE TABLA
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Predial";
-					bulkCopy.BatchSize = 10000;
-					bulkCopy.BulkCopyTimeout = 120;
-
-					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
-					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
-					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
-					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
-					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
-					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
-					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
-					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
-
-					bulkCopy.WriteToServer(lote);
 				}
 			}
 		}

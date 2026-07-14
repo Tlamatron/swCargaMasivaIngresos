@@ -154,10 +154,17 @@ namespace swCargaMasivaIngresos.Services
 						continue;
 					}
 
-					if (!Utilerias.TryParseFecha(col[23], out DateTime fechaVigencia))
+					DateTime fechaVigencia = DateTime.Now; // Por defecto asumimos la fecha de carga
+					string fechaTxt = col[23].Trim();
+
+					if (!string.IsNullOrWhiteSpace(fechaTxt))
 					{
-						MarcarError(resultado, numeroLinea, "Fecha de vigencia inválida.");
-						continue;
+						// Forzamos estrictamente el formato de México (DD/MM/AAAA) para evitar inversiones de mes/día
+						if (!DateTime.TryParse(fechaTxt, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out fechaVigencia))
+						{
+							MarcarError(resultado, numeroLinea, $"Fecha de vigencia inválida ('{fechaTxt}'). Se esperaba formato de México (DD/MM/AAAA).");
+							continue;
+						}
 					}
 
 					// 3. Se agregan los datos limpios al lote (Todo va como string hacia Staging)
