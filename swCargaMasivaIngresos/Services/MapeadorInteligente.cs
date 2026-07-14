@@ -68,6 +68,7 @@ namespace swCargaMasivaIngresos.Services
 			}
 
 			// 2. ZONA B: Encontrar inicio de datos
+			// 2. ZONA B: Encontrar inicio de datos (Análisis Estructural Híbrido)
 			filaInicioDatos = filaEncabezado + 1;
 			for (int i = filaEncabezado + 1; i < Math.Min(filaEncabezado + 10, tabla.Rows.Count); i++)
 			{
@@ -76,15 +77,30 @@ namespace swCargaMasivaIngresos.Services
 
 				if (string.IsNullOrWhiteSpace(textoUnido)) continue;
 
-				if (textoUnido.Contains("BIMESTRAL") || textoUnido.Contains("RUSTICO") || textoUnido.Contains("URBANO") ||
-					textoUnido.Contains("ANUAL") || textoUnido.Contains("BIMESTRE") || textoUnido.Contains("SUBURBANO") ||
-					textoUnido.Contains("PREDIO") || textoUnido.Contains("CUENTA") || textoUnido.Contains("CLASE"))
+				// 🚀 1. EVALUACIÓN ESTRUCTURAL (Tu propuesta)
+				// Contamos cuántas celdas en esta fila son puramente numéricas.
+				// Los datos del padrón tienen Municipio, Tipo de Predio, Cuenta e Importes (mínimo 3 números).
+				int cantidadNumeros = celdas.Count(c => decimal.TryParse(c, out _));
+
+				if (cantidadNumeros >= 3)
 				{
-					continue;
+					// ¡Es matemáticamente una fila de datos! Rompemos el ciclo inmediatamente.
+					filaInicioDatos = i;
+					LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ANÁLISIS ESTRUCTURAL! Datos inician en Fila {i} (Contiene {cantidadNumeros} celdas numéricas)").Wait();
+					break;
 				}
 
+				// 🚀 2. EVALUACIÓN LÉXICA ESTRICTA (Por si hay subtítulos fusionados)
+				// Usamos FRASES EXACTAS, nunca palabras sueltas.
+				if (textoUnido.Contains("TIPO DE PREDIO") || textoUnido.Contains("CLASE DE PAGO") ||
+					textoUnido.Contains("IMPUESTO DETERMINADO") || textoUnido.Contains("CLAVE DEL MUNICIPIO"))
+				{
+					continue; // Sigue siendo un encabezado
+				}
+
+				// Si no tiene muchos números, pero tampoco tiene frases de encabezado, asumimos que son datos (Ej. un cascarón con puros textos)
 				filaInicioDatos = i;
-				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ÉXITO! Los datos inician en la Fila {i}").Wait();
+				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ANÁLISIS LÉXICO! Datos inician en Fila {i}").Wait();
 				break;
 			}
 
@@ -191,8 +207,8 @@ namespace swCargaMasivaIngresos.Services
 				{
 					foreach (var kvp in mapaCrudo)
 					{
-						// Si la columna tiene el sinónimo Y no ha sido reclamada por nadie más...
-						if (kvp.Key.Contains(sin) && !columnasUsadas.Contains(kvp.Value))
+						// Buscamos coincidencia ignorando espacios y mayúsculas
+						if (kvp.Key.Replace(" ", "").Contains(sin.Replace(" ", "")) && !columnasUsadas.Contains(kvp.Value))
 						{
 							oficial.Columnas[nombreOficial] = kvp.Value;
 							columnasUsadas.Add(kvp.Value); // 🔒 Se bloquea la columna
@@ -203,23 +219,39 @@ namespace swCargaMasivaIngresos.Services
 			}
 
 			// 🚀 1. PRIMERO ASEGURAMOS LOS METADATOS COMPUESTOS (El blindaje)
-			// Al reclamar estas columnas primero, evitamos que la palabra "PAGO" confunda al Impuesto
 			Asignar("ClasePago", "CLASE DE PAGO", "CLASE");
 			Asignar("BimestreConsolidado", "BIMESTRE PAGADO", "BIMESTRE", "PERIODO", "MESES");
 			Asignar("ClaveMunicipio", "CLAVE DEL MUNICIPIO", "MUNICIPIO", "CVEMUN", "MPIO");
 			Asignar("TipoPredio", "TIPO DE PREDIO", "PREDIO", "TIPO", "DESC_PRED");
 
-			// 🚀 2. DESPUÉS LAS GENERALES Y EL DINERO
+			// 🚀 2. LAS COLUMNAS OBLIGATORIAS Y PRINCIPALES
 			Asignar("CuentaPredial", "CUENTA", "PREDIAL", "CTA", "CTA.", "CLAVE");
 			Asignar("Anio", "AÑO", "EJERCICIO", "EJERCICIO FISCAL");
-			// Ahora sí es 100% seguro buscar "PAGO", porque las columnas de arriba ya están bloqueadas.
 			Asignar("ImpuestoDeterminado", "SALDO", "TOTAL", "PAGO", "IMPUESTO", "IMPORTE");
 			Asignar("FechaVigencia", "FECHA", "VIGENCIA");
+			Asignar("BaseGravable", "BASE GRAVABLE", "BASE", "VALOR CATASTRAL", "VALOR");
 
-			// 🚀 3. EL RESTO
-			Asignar("NombrePropietario", "NOMBRE", "PROPIETARIO", "CONTRIBUYENTE");
-			Asignar("BaseGravable", "BASE GRAVABLE", "BASE", "VALOR CATASTRAL");
+			// 🚀 3. EL NUEVO ENTRENAMIENTO: TODA LA DEMOGRAFÍA OPCIONAL DEL PADRÓN
+			Asignar("FolioUnico", "FOLIO UNICO", "FOLIO ÚNICO", "FOLIO", "CONTROL", "NÚM. DE CONTROL", "NUM. DE CONTROL");
+			Asignar("Localidad", "LOCALIDAD", "POBLACION", "POBLACIÓN", "CIUDAD");
+			Asignar("Calle", "CALLE", "AVENIDA", "DIRECCION", "DIRECCIÓN", "DOMICILIO");
+			Asignar("NumExterior", "NÚM. EXT", "NUM. EXT", "NO. EXT", "EXTERIOR", "EXT");
+			Asignar("NumInterior", "NÚM. INT", "NUM. INT", "NO. INT", "INTERIOR", "INT");
+			Asignar("Letra", "LETRA", "LOTE", "MANZANA", "MZA");
+			Asignar("Colonia", "COLONIA", "BARRIO", "FRACCIONAMIENTO", "SECCION");
+			Asignar("CP", "CP", "C.P.", "CÓDIGO POSTAL", "CODIGO POSTAL");
 
+			Asignar("Nombre", "NOMBRE", "PROPIETARIO", "CONTRIBUYENTE", "RAZON SOCIAL", "RAZÓN SOCIAL");
+			Asignar("PrimerApellido", "PRIMER APELLIDO", "APELLIDO PATERNO", "PATERNO", "APELLIDO 1");
+			Asignar("SegundoApellido", "SEGUNDO APELLIDO", "APELLIDO MATERNO", "MATERNO", "APELLIDO 2");
+
+			Asignar("TipoPersona", "TIPO PERSONA", "TIPO DE PERSONA", "FISICA/MORAL", "FISICA MORAL");
+			Asignar("RFC", "RFC", "R.F.C.", "REGISTRO FEDERAL", "REGISTRO FEDERAL DEL CONTRIBUYENTE");
+			Asignar("ClaveRegimenSAT", "REGIMEN SAT", "RÉGIMEN SAT", "REGIMEN FISCAL", "CLAVE REGIMEN");
+			Asignar("ClaveUsoSAT", "USO SAT", "USO CFDI", "CLAVE USO");
+			Asignar("CPFiscalSAT", "CP FISCAL", "C.P. FISCAL", "CODIGO POSTAL FISCAL");
+
+			// Bimestres Sueltos
 			string[] columnasBimestrales = { "1", "2", "3", "4", "5", "6", "B1", "B2", "B3", "B4", "B5", "B6" };
 			foreach (var col in columnasBimestrales)
 			{
