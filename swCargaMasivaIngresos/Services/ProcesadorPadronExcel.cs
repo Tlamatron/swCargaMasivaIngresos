@@ -84,7 +84,8 @@ namespace swCargaMasivaIngresos.Services
 
 						if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 						{
-							InsertarBulkPadron(resultadoLimpieza.TablaValidos);
+							//InsertarBulkPadron(resultadoLimpieza.TablaValidos);
+							InsertarBulkPadron(resultadoLimpieza.TablaValidos, param);
 						}
 
 						resultadoFinal.RegistrosExitosos += resultadoLimpieza.TablaValidos.Rows.Count;
@@ -124,7 +125,50 @@ namespace swCargaMasivaIngresos.Services
 		/// Método privado que realiza la inserción masiva de los registros válidos del padrón en la base de datos utilizando SqlBulkCopy. Se asegura de mapear correctamente las columnas del DataTable a las columnas de la tabla de destino en la base de datos.
 		/// </summary>
 		/// <param name="lote"></param>
-		private void InsertarBulkPadron(DataTable lote)
+		private void InsertarBulkPadron(DataTable lote, ParametrosCarga param)
+		{
+			foreach (DataRow row in lote.Rows)
+			{
+				if (row["FechaVigencia"] != DBNull.Value && string.IsNullOrWhiteSpace(row["FechaVigencia"].ToString())) row["FechaVigencia"] = DBNull.Value;
+				if (row["ImpuestoDeterminado"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ImpuestoDeterminado"].ToString())) row["ImpuestoDeterminado"] = "0";
+				if (row["Bimestre"] != DBNull.Value && string.IsNullOrWhiteSpace(row["Bimestre"].ToString())) row["Bimestre"] = "0";
+				if (row["ClasePago"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ClasePago"].ToString())) row["ClasePago"] = "1";
+			}
+
+			using (SqlConnection conn = new SqlConnection(CadenaConexion))
+			{
+				conn.Open();
+
+				// 1. ADUANA: Metemos los datos a Staging
+				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
+				{
+					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Predial";
+					bulkCopy.BatchSize = 10000;
+					bulkCopy.BulkCopyTimeout = 120;
+
+					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
+					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
+					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
+					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
+					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
+					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
+					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
+					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
+
+					bulkCopy.WriteToServer(lote);
+				}
+
+				// 🚀 2. CONSOLIDACIÓN: El eslabón que faltaba
+				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergePadron", conn))
+				{
+					cmd.CommandType = CommandType.StoredProcedure;
+					cmd.CommandTimeout = 180;
+					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
+					cmd.ExecuteNonQuery();
+				}
+			}
+		}
+		private void InsertarBulkPadron_v01(DataTable lote)
 		{
 			foreach (DataRow row in lote.Rows)
 			{
