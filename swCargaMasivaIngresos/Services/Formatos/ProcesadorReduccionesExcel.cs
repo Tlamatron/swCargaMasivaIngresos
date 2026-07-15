@@ -39,7 +39,7 @@ namespace swCargaMasivaIngresos.Services
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraReducciones();
 
-						HashSet<string> reduccionesProcesadas = new HashSet<string>();
+						//HashSet<string> reduccionesProcesadas = new HashSet<string>();
 
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
@@ -83,14 +83,14 @@ namespace swCargaMasivaIngresos.Services
 							}
 
 							// 🚀 FILTRO ANTI-DUPLICADOS
-							string llaveUnica = $"{claveMun}-{tipoPredio}-{cuentaPredial}-{tipoRed}";
-							if (reduccionesProcesadas.Contains(llaveUnica))
-							{
-								resultadoFinal.RegistrosFallidos++;
-								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: La cuenta {cuentaPredial} ya tiene asignado el descuento {tipoRed} en este archivo.");
-								continue;
-							}
-							reduccionesProcesadas.Add(llaveUnica);
+							//string llaveUnica = $"{claveMun}-{tipoPredio}-{cuentaPredial}-{tipoRed}";
+							//if (reduccionesProcesadas.Contains(llaveUnica))
+							//{
+							//	resultadoFinal.RegistrosFallidos++;
+							//	resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: La cuenta {cuentaPredial} ya tiene asignado el descuento {tipoRed} en este archivo.");
+							//	continue;
+							//}
+							//reduccionesProcesadas.Add(llaveUnica);
 
 							DataRow nuevaFila = tablaCrudos.NewRow();
 							nuevaFila["ClaveMunicipio"] = claveMun.ToString();

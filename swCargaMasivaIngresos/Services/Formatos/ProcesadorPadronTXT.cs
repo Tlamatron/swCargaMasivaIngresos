@@ -25,7 +25,7 @@ namespace swCargaMasivaIngresos.Services
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
 			DataTable tablaLote = CrearEstructuraPadron();
-			HashSet<string> cuentasProcesadas = new HashSet<string>();
+			//HashSet<string> cuentasProcesadas = new HashSet<string>();
 
 			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT", $"Inicia lectura de archivo Folio: {param.FolioCarga}");
 
@@ -147,14 +147,14 @@ namespace swCargaMasivaIngresos.Services
 
 					// Validar duplicados exactos en el archivo (Llave Compuesta)
 					//string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}";
-					string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{bimestre}";
-					if (cuentasProcesadas.Contains(llaveUnica))
-					{
-						//MarcarError(resultado, numeroLinea, $"El predio con Cuenta {cuentaPredial} y Tipo {tipoPre} viene duplicado en el archivo.");
-						MarcarError(resultado, numeroLinea, $"El predio con Cuenta {cuentaPredial} tiene el Bimestre {bimestre} duplicado en el archivo.");
-						continue;
-					}
-					cuentasProcesadas.Add(llaveUnica);
+					//string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{bimestre}";
+					//if (cuentasProcesadas.Contains(llaveUnica))
+					//{
+					//	//MarcarError(resultado, numeroLinea, $"El predio con Cuenta {cuentaPredial} y Tipo {tipoPre} viene duplicado en el archivo.");
+					//	MarcarError(resultado, numeroLinea, $"El predio con Cuenta {cuentaPredial} tiene el Bimestre {bimestre} duplicado en el archivo.");
+					//	continue;
+					//}
+					//cuentasProcesadas.Add(llaveUnica);
 
 					// Validaciones de moneda y fechas
 					decimal baseGravable = 0;

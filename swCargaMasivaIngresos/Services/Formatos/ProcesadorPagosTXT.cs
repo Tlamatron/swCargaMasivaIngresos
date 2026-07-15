@@ -25,7 +25,7 @@ namespace swCargaMasivaIngresos.Services
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
 			DataTable tablaLote = CrearEstructuraPagos();
-			HashSet<string> pagosProcesados = new HashSet<string>();
+			//HashSet<string> pagosProcesados = new HashSet<string>();
 
 			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT", $"Inicia lectura de archivo Folio: {param.FolioCarga}");
 
@@ -43,7 +43,7 @@ namespace swCargaMasivaIngresos.Services
 					numeroLinea++;
 					if (string.IsNullOrWhiteSpace(linea)) continue;
 
-					// 🚀 DETECCIÓN DEL DELIMITADOR (Solo se ejecuta en la primera línea válida)
+					// DETECCIÓN DEL DELIMITADOR (Solo se ejecuta en la primera línea válida)
 					if (!delimitadorDetectado)
 					{
 						if (linea.Contains("|")) delimitador = '|';
@@ -96,12 +96,12 @@ namespace swCargaMasivaIngresos.Services
 					}
 
 					// 4. Evitar procesar el mismo pago dos veces (¡Agregamos el Bimestre a la llave!)
-					string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{bimestre}";
-					if (pagosProcesados.Contains(llaveUnica))
-					{
-						continue;
-					}
-					pagosProcesados.Add(llaveUnica);
+					//string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{bimestre}";
+					//if (pagosProcesados.Contains(llaveUnica))
+					//{
+					//	continue;
+					//}
+					//pagosProcesados.Add(llaveUnica);
 
 					// 5. Agregar a la tabla en memoria
 					tablaLote.Rows.Add(
@@ -185,7 +185,7 @@ namespace swCargaMasivaIngresos.Services
 					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
 					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
 					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
-					//bulkCopy.ColumnMappings.Add("Descuento", "Descuento"); // Usa el nombre exacto de tu BD
+					//bulkCopy.ColumnMappings.Add("Descuento", "Descuento"); 
 
 					bulkCopy.WriteToServer(lote);
 				}

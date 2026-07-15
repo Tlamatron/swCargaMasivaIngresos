@@ -19,7 +19,7 @@ namespace swCargaMasivaIngresos.Services
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
 			DataTable tablaLote = CrearEstructuraReducciones();
-			HashSet<string> reduccionesProcesadas = new HashSet<string>();
+			//HashSet<string> reduccionesProcesadas = new HashSet<string>();
 
 			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorReduccionesTXT", $"Inicia lectura de archivo de Descuentos. Folio: {param.FolioCarga}");
 
@@ -140,13 +140,13 @@ namespace swCargaMasivaIngresos.Services
 					}
 
 					// 4. Evitar filas duplicadas idénticas en el mismo TXT
-					string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{tipoRed}";
-					if (reduccionesProcesadas.Contains(llaveUnica))
-					{
-						MarcarError(resultado, numeroLinea, $"La cuenta {cuentaPredial} ya tiene asignado el descuento {tipoRed} en este archivo.");
-						continue;
-					}
-					reduccionesProcesadas.Add(llaveUnica);
+					//string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{tipoRed}";
+					//if (reduccionesProcesadas.Contains(llaveUnica))
+					//{
+					//	MarcarError(resultado, numeroLinea, $"La cuenta {cuentaPredial} ya tiene asignado el descuento {tipoRed} en este archivo.");
+					//	continue;
+					//}
+					//reduccionesProcesadas.Add(llaveUnica);
 
 					// 5. Agregar a la tabla en memoria (Staging)
 					tablaLote.Rows.Add(
@@ -203,7 +203,6 @@ namespace swCargaMasivaIngresos.Services
 					bulkCopy.WriteToServer(lote);
 				}
 
-				// Llamamos al SP que mueve de Staging a la tabla relacional final
 				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeReducciones", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
