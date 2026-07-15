@@ -251,6 +251,9 @@ namespace swCargaMasivaIngresos.Services
 			Asignar("ClaveUsoSAT", "USO SAT", "USO CFDI", "CLAVE USO");
 			Asignar("CPFiscalSAT", "CP FISCAL", "C.P. FISCAL", "CODIGO POSTAL FISCAL");
 
+			//Para el archivo de los descuentos.
+			Asignar("TipoReduccion", "TIPO DE REDUCCION", "TIPO DE REDUCCIÓN", "REDUCCION", "REDUCCIÓN", "DESCUENTO", "REDUCCI");
+
 			// Bimestres Sueltos
 			string[] columnasBimestrales = { "1", "2", "3", "4", "5", "6", "B1", "B2", "B3", "B4", "B5", "B6" };
 			foreach (var col in columnasBimestrales)

@@ -64,7 +64,8 @@ namespace swCargaMasivaIngresos.Services
 							}
 
 							string folioUnico = ExtraerSeguro(fila, mapaBloqueado, "FolioUnico", "");
-							string tipoReduccion = ExtraerSeguro(fila, mapaBloqueado, "TipoReduccion", "");
+							string tipoReduccion = ExtraerSeguro(fila, mapaBloqueado, "TipoReduccion", "").Trim();
+							if (tipoReduccion.EndsWith(".0")) tipoReduccion = tipoReduccion.Replace(".0", "");
 
 							// 🚀 VALIDACIONES DE NEGOCIO
 							if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
@@ -77,7 +78,7 @@ namespace swCargaMasivaIngresos.Services
 							if (!byte.TryParse(tipoReduccion, out byte tipoRed) || tipoRed < 1)
 							{
 								resultadoFinal.RegistrosFallidos++;
-								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: Tipo de Reducción inválido. Debe ser numérico.");
+								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: Tipo de Reducción inválido. Valor encontrado: '{tipoReduccion}'. Debe ser numérico.");
 								continue;
 							}
 

@@ -66,9 +66,20 @@ namespace swCargaMasivaIngresos.Services
 						mensaje.Subject = $"Resultados de Carga Masiva - Folio: {parametros.FolioCarga}{tituloMpio}";
 						mensaje.IsBodyHtml = true;
 
+						// 🚀 Determinar el Tipo de Archivo procesado
+						string nombreTipoCarga = "Desconocido";
+						switch (parametros.TipoCargaId)
+						{
+							case 1: nombreTipoCarga = "Padrón Catastral (Alta de Predios)"; break;
+							case 2: nombreTipoCarga = "Pagos Locales (Etiquetado)"; break;
+							case 3: nombreTipoCarga = "Reducciones y Descuentos"; break;
+						}
+
 						StringBuilder sbBody = new StringBuilder();
 						sbBody.AppendLine("<h2>Reporte de Carga de Archivo</h2>");
 						sbBody.AppendLine($"<p>Estimado usuario de la oficina <b>{parametros.OficinaId}</b>,</p>");
+
+						sbBody.AppendLine($"<p><b>Tipo de Carga procesada:</b> {nombreTipoCarga}</p>");
 
 						// 🚀 Agregamos el Municipio al CUERPO del correo
 						if (parametros.ClaveMunicipioDestino > 0)
