@@ -296,7 +296,32 @@ namespace swCargaMasivaIngresos.Services
 			// 🚀 2. LAS COLUMNAS OBLIGATORIAS Y PRINCIPALES
 			Asignar("CuentaPredial", "CUENTA", "PREDIAL", "CTA", "CTA.", "CLAVE");
 			Asignar("Anio", "AÑO", "EJERCICIO", "EJERCICIO FISCAL");
-			Asignar("ImpuestoDeterminado", "SALDO", "TOTAL", "PAGO", "IMPUESTO", "IMPORTE");
+			//Asignar("ImpuestoDeterminado", "SALDO", "TOTAL", "PAGO", "IMPUESTO", "IMPORTE", "TOTAL.*BRUTO", "IMPUESTO.*TOTAL");
+			// Obtenemos el año en curso para blindarlo a futuro
+			string anioActual = DateTime.Now.Year.ToString();
+
+			Asignar("ImpuestoDeterminado",
+				// 🎯 1. FRANCOTIRADORES DE MÁXIMA PRIORIDAD (Año actual)
+				$"{anioActual}(BRUTO)",      // Atrapa a Cañada Morelos: "2026 (BRUTO)"
+				$"{anioActual}BRUTO",
+				$"TOTAL{anioActual}",        // Ej: "TOTAL 2026"
+				$"IMPUESTO{anioActual}",     // Ej: "IMPUESTO 2026"
+
+				// 🎯 2. FRANCOTIRADORES SEMÁNTICOS (Palabras contundentes)
+				"ACTUAL",                    // Ej: "IMPUESTO ACTUAL", "COBRO ACTUAL"
+				"NETO",                      // Ej: "IMPORTE COBRADO (NETO)"
+				"IMPUESTODETERMINADO",       // Nombre oficial perfecto
+
+				// 🎯 3. PALABRAS ESTÁNDAR (El 90% de los municipios)
+				"IMPUESTO",
+				"IMPORTE",
+				"PAGO",
+
+				// 🎯 4. ÚLTIMO RECURSO (Genéricos peligrosos)
+				"SALDO",
+				"TOTAL"
+			);
+
 			Asignar("FechaVigencia", "FECHA", "VIGENCIA");
 			Asignar("BaseGravable", "BASE GRAVABLE", "BASE", "VALOR CATASTRAL", "VALOR");
 
