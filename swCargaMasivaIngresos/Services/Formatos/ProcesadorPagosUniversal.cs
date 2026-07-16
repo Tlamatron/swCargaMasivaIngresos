@@ -25,112 +25,107 @@ namespace swCargaMasivaIngresos.Services
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 
-			LogService.WriteLogAsync("WARN", param.UsuarioLogin, "ProcesadorPagosUniversal", $"[TRACE] Iniciando lectura inteligente de TXT/CSV. Folio: {param.FolioCarga}").Wait();
+			// Aseguramos tener la extensión
+			string extension = System.IO.Path.GetExtension(rutaArchivo);
+
+			LogService.WriteLogAsync("WARN", param.UsuarioLogin, "ProcesadorPagosUniversal", $"[TRACE] Iniciando lectura inteligente. Folio: {param.FolioCarga}").Wait();
 
 			try
 			{
-				var resultadoLectura = LectorUniversal.LeerArchivo(rutaArchivo, Path.GetExtension(rutaArchivo));
-				DataTable tablaTXT = resultadoLectura.TablaCruda;
+				var hojasLeidas = LectorUniversal.LeerArchivo(rutaArchivo, extension);
 
-				if (tablaTXT == null || tablaTXT.Rows.Count == 0) return resultadoFinal;
-
-				int filaInicioDatos;
-				var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(tablaTXT, out filaInicioDatos);
-
-				if (mapaCrudo.Count == 0)
-					throw new Exception("No se encontraron encabezados válidos en el archivo TXT/CSV.");
-
-				var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
-				DataTable tablaCrudos = CrearEstructuraRaw();
-
-				// 🚀 1. EL HASHSET VA AFUERA DEL CICLO (Para que tenga memoria global)
-				//HashSet<string> pagosProcesados = new HashSet<string>();
-
-				for (int i = filaInicioDatos; i < tablaTXT.Rows.Count; i++)
+				foreach (var hoja in hojasLeidas)
 				{
-					var fila = tablaTXT.Rows[i];
-					if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
-
-					// 🚀 EXTRACCIÓN SEGURA
-					string cuentaPredial = ExtraerSeguro(fila, mapaBloqueado, "CuentaPredial", "");
-					if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
-					if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
-
-					string anioPredial = ExtraerSeguro(fila, mapaBloqueado, "Anio", "");
-					if (string.IsNullOrWhiteSpace(anioPredial)) anioPredial = DateTime.Now.Year.ToString();
-					if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
-
-					string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
-					if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
-					else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
-					else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
-					if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
-
-					string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "1");
-					string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
-					if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "0";
-
-					string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
-					if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
+					// CORRECCIÓN 1: Usar hoja.ErroresEstructurales en lugar de resultadoLimpieza
+					if (hoja.ErroresEstructurales.Any())
 					{
-						claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
+						resultadoFinal.ErroresDetalle.AddRange(hoja.ErroresEstructurales);
+						continue;
 					}
 
-					// 🚀 FALLBACK LÓGICO DE FECHAS
-					string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
-					if (string.IsNullOrWhiteSpace(fechaVigencia))
+					// CORRECCIÓN 2: Usar hoja.TablaCruda en lugar de tablaTXT, y declarar "out int"
+					var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(hoja.TablaCruda, out int filaInicioDatos);
+
+					if (mapaCrudo.Count == 0)
 					{
-						fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
-					}
-					else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
-					{
-						fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
-					}
-					else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
-					{
-						fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
-					}
-					else
-					{
-						fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+						resultadoFinal.ErroresDetalle.Add($"No se encontraron encabezados válidos en la pestaña: {hoja.ContextoPestaña}");
+						continue; // Saltamos la pestaña mala, pero el archivo sigue
 					}
 
-					// 🚀 2. FILTRO ANTI-DUPLICADOS EN MEMORIA (Con Registro de Error)
-					//string llaveUnica = $"{claveMunicipio}-{tipoPredio}-{cuentaPredial}-{bimestre}";
-					//if (pagosProcesados.Contains(llaveUnica))
-					//{
-					//	// Registramos el fallo para que salga en el correo
-					//	resultadoFinal.RegistrosFallidos++;
-					//	resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El pago de la cuenta {cuentaPredial} para el bimestre {bimestre} está duplicado en el archivo.");
+					var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
+					DataTable tablaCrudos = CrearEstructuraRaw();
 
-					//	continue; // Ahora sí, saltamos el registro para proteger la base de datos
-					//}
-					//pagosProcesados.Add(llaveUnica);
+					// EL HASHSET ESTÁ COMENTADO PERFECTAMENTE PARA LOS CLONES
+					//HashSet<string> pagosProcesados = new HashSet<string>();
 
-					// 🚀 3. LLENADO CORRECTO DE LA FILA CRUDA
-					DataRow nuevaFila = tablaCrudos.NewRow();
-					nuevaFila["ClaveMunicipio"] = claveMunicipio;
-					nuevaFila["TipoPredio"] = tipoPredio;
-					nuevaFila["CuentaPredial"] = cuentaPredial;
-					nuevaFila["ClasePago"] = clasePago;
-					nuevaFila["Bimestre"] = bimestre;
-					nuevaFila["ImpuestoDeterminado"] = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0");
-					nuevaFila["FechaVigencia"] = fechaVigencia;
-					nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
+					// CORRECCIÓN 3: Usar hoja.TablaCruda.Rows.Count
+					for (int i = filaInicioDatos; i < hoja.TablaCruda.Rows.Count; i++)
+					{
+						var fila = hoja.TablaCruda.Rows[i];
+						if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 
-					tablaCrudos.Rows.Add(nuevaFila);
+						// --- [TODA TU EXTRACCIÓN SEGURA SE QUEDA EXACTAMENTE IGUAL] ---
+						string cuentaPredial = ExtraerSeguro(fila, mapaBloqueado, "CuentaPredial", "");
+						if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
+						if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
+
+						string anioPredial = ExtraerSeguro(fila, mapaBloqueado, "Anio", "");
+						if (string.IsNullOrWhiteSpace(anioPredial)) anioPredial = DateTime.Now.Year.ToString();
+						if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+
+						string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
+						if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
+						else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
+						else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
+						if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
+
+						string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "1");
+						string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+						if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "0";
+
+						string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
+						if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
+						{
+							claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
+						}
+
+						string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
+						if (string.IsNullOrWhiteSpace(fechaVigencia)) fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+						else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/")) fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
+						else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada)) fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
+						else fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+
+						// 3. LLENADO CORRECTO DE LA FILA CRUDA
+						DataRow nuevaFila = tablaCrudos.NewRow();
+						nuevaFila["ClaveMunicipio"] = claveMunicipio;
+						nuevaFila["TipoPredio"] = tipoPredio;
+						nuevaFila["CuentaPredial"] = cuentaPredial;
+						nuevaFila["ClasePago"] = clasePago;
+						nuevaFila["Bimestre"] = bimestre;
+						nuevaFila["ImpuestoDeterminado"] = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0");
+						nuevaFila["FechaVigencia"] = fechaVigencia;
+						nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
+
+						tablaCrudos.Rows.Add(nuevaFila);
+					}
+
+					// CORRECCIÓN 4: Pasar hoja.ContextoPestaña para que la inferencia sepa qué mes o predio es
+					var resultadoLimpieza = LimpiadorDatos.LimpiarYValidar(tablaCrudos, hoja.ContextoPestaña, param);
+
+					if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
+					{
+						InsertarBulk(resultadoLimpieza.TablaValidos, param);
+					}
+
+					resultadoFinal.RegistrosExitosos += resultadoLimpieza.TablaValidos.Rows.Count;
+					resultadoFinal.RegistrosFallidos += resultadoLimpieza.TablaRechazados.Rows.Count;
+
+					// Acumulamos los errores de limpieza de esta pestaña al global del correo
+					if (resultadoLimpieza.DetallesErrores.Any())
+					{
+						resultadoFinal.ErroresDetalle.AddRange(resultadoLimpieza.DetallesErrores);
+					}
 				}
-
-				var resultadoLimpieza = LimpiadorDatos.LimpiarYValidar(tablaCrudos, "TXT_Pagos", param);
-
-				if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
-				{
-					InsertarBulk(resultadoLimpieza.TablaValidos, param);
-				}
-
-				resultadoFinal.RegistrosExitosos += resultadoLimpieza.TablaValidos.Rows.Count;
-				resultadoFinal.RegistrosFallidos += resultadoLimpieza.TablaRechazados.Rows.Count;
-				if (resultadoLimpieza.DetallesErrores != null) resultadoFinal.ErroresDetalle.AddRange(resultadoLimpieza.DetallesErrores);
 			}
 			catch (Exception ex)
 			{

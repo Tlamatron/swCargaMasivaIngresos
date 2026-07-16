@@ -39,35 +39,104 @@ namespace swCargaMasivaIngresos.Services
 			// 🚀 HACK: Disfrazamos el Trace de WARN para que LogService lo imprima sí o sí
 			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] === ESCANEANDO PESTAÑA: {tabla.TableName} | Filas Totales: {tabla.Rows.Count} ===").Wait();
 
-			// 1. ZONA A: Encontrar dónde empiezan los títulos reales
+			//// 1. ZONA A: Encontrar dónde empiezan los títulos reales
+			//for (int i = 0; i < Math.Min(50, tabla.Rows.Count); i++)
+			//{
+			//	var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+			//	string texto = string.Join(" ", celdas).ToUpper();
+
+			//	bool tieneContexto = texto.Contains("CLAVE") || texto.Contains("MUNICIPIO") || texto.Contains("CUENTA") || texto.Contains("PREDIAL") || texto.Contains("FECHA");
+
+			//	// Imprimimos todo lo que tenga al menos 1 celda llena
+			//	if (celdas.Count > 0)
+			//	{
+			//		LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} | Celdas Llenas: {celdas.Count} | Contexto: {tieneContexto} | Texto: {texto}").Wait();
+			//	}
+
+			//	if (celdas.Count >= 2 && tieneContexto)
+			//	{
+			//		filaEncabezado = i;
+			//		LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ANCLADO! Encabezado inicia en Fila {i}").Wait();
+			//		break;
+			//	}
+			//}
+
+			//if (filaEncabezado == -1)
+			//{
+			//	LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", "[TRACE] -> FRACASO: No se encontró la fila de encabezados. Abortando pestaña.").Wait();
+			//	return new Dictionary<string, int>();
+			//}
+
+			// 1. ZONA A: Búsqueda Heurística por Ponderación Estructural (El "Escáner")
+			int mejorPuntaje = -1;
+			int filaCandidata = -1;
+
+			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] === ESCANEANDO PESTAÑA: {tabla.TableName} | Filas Totales: {tabla.Rows.Count} ===").Wait();
+
 			for (int i = 0; i < Math.Min(50, tabla.Rows.Count); i++)
 			{
-				var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
-				string texto = string.Join(" ", celdas).ToUpper();
+				var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
+				int celdasLlenas = celdas.Count(x => !string.IsNullOrWhiteSpace(x));
 
-				bool tieneContexto = texto.Contains("CLAVE") || texto.Contains("MUNICIPIO") || texto.Contains("CUENTA") || texto.Contains("PREDIAL") || texto.Contains("FECHA");
+				// Si la fila está vacía, la ignoramos completamente
+				if (celdasLlenas == 0) continue;
 
-				// Imprimimos todo lo que tenga al menos 1 celda llena
-				if (celdas.Count > 0)
+				string textoFila = string.Join(" ", celdas).ToUpper();
+				int puntajeFila = 0;
+
+				// 📊 CRITERIO 1: Densidad Horizontal (Peso ligero)
+				// Entre más columnas tenga, más probable es que sea la tabla principal y no un subtítulo.
+				puntajeFila += celdasLlenas;
+
+				// 📊 CRITERIO 2: Palabras Clave Core (Peso pesado)
+				// Estas palabras gritan "¡Soy el encabezado de los datos!"
+				if (textoFila.Contains("CUENTA") || textoFila.Contains("CTA")) puntajeFila += 10;
+				if (textoFila.Contains("PREDIO")) puntajeFila += 10;
+				if (textoFila.Contains("BIMESTRE")) puntajeFila += 10;
+				if (textoFila.Contains("CLASE")) puntajeFila += 10;
+				if (textoFila.Contains("IMPUESTO") || textoFila.Contains("REDUCCION")) puntajeFila += 10;
+
+				// 📊 CRITERIO 3: Palabras Clave Suaves (Peso medio)
+				// Pueden estar en el título o en la tabla.
+				if (textoFila.Contains("MUNICIPIO")) puntajeFila += 3;
+				if (textoFila.Contains("FECHA")) puntajeFila += 3;
+				if (textoFila.Contains("NOMBRE")) puntajeFila += 3;
+
+				// 📊 CRITERIO 4: Análisis de Contexto Vecino (Lo que tú sugeriste)
+				// Miramos la fila inmediatamente inferior. Si abajo hay números puros (como montos, cuentas, claves), 
+				// es casi seguro que nosotros somos el encabezado.
+				if (i + 1 < tabla.Rows.Count)
 				{
-					LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} | Celdas Llenas: {celdas.Count} | Contexto: {tieneContexto} | Texto: {texto}").Wait();
+					var celdasAbajo = tabla.Rows[i + 1].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
+					int numerosAbajo = celdasAbajo.Count(c => decimal.TryParse(c, out _));
+
+					// Cada número en la fila de abajo nos da muchísima confianza
+					puntajeFila += (numerosAbajo * 5);
 				}
 
-				if (celdas.Count >= 2 && tieneContexto)
+				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} | Llenas: {celdasLlenas} | Puntaje Calculado: {puntajeFila} | Texto: {textoFila}").Wait();
+
+				// 🏆 CORONACIÓN DEL CANDIDATO
+				// Exigimos un mínimo de 15 puntos para evitar anclarnos en basura con números al azar
+				if (puntajeFila > mejorPuntaje && puntajeFila >= 15)
 				{
-					filaEncabezado = i;
-					LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ANCLADO! Encabezado inicia en Fila {i}").Wait();
-					break;
+					mejorPuntaje = puntajeFila;
+					filaCandidata = i;
 				}
 			}
 
-			if (filaEncabezado == -1)
+			// RESULTADO DEL ESCÁNER
+			if (filaCandidata != -1)
 			{
-				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", "[TRACE] -> FRACASO: No se encontró la fila de encabezados. Abortando pestaña.").Wait();
+				filaEncabezado = filaCandidata;
+				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ANCLADO! Ganador indiscutible Fila {filaEncabezado} con {mejorPuntaje} puntos.").Wait();
+			}
+			else
+			{
+				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", "[TRACE] -> FRACASO: Ninguna fila superó el umbral de ponderación. Abortando pestaña.").Wait();
 				return new Dictionary<string, int>();
 			}
 
-			// 2. ZONA B: Encontrar inicio de datos
 			// 2. ZONA B: Encontrar inicio de datos (Análisis Estructural Híbrido)
 			filaInicioDatos = filaEncabezado + 1;
 			for (int i = filaEncabezado + 1; i < Math.Min(filaEncabezado + 10, tabla.Rows.Count); i++)

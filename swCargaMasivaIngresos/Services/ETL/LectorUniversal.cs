@@ -14,74 +14,78 @@ namespace swCargaMasivaIngresos.Services
 	public class ResultadoLecturaCruda
 	{
 		/// <summary>
-		/// Tabla cruda en memoria que contiene los datos leídos del archivo físico (Excel, TXT, CSV). Esta tabla no tiene encabezados definidos y puede contener errores estructurales que deben ser manejados posteriormente.
+		/// Tabla cruda en memoria que contiene los datos leídos del archivo físico (Excel, TXT, CSV).
 		/// </summary>
 		public DataTable TablaCruda { get; set; }
+
 		/// <summary>
-		/// Guarda el contexto de la pestaña o sección del archivo leído, como "ENERO 2026", "URBANO", etc. Este valor se extrae principalmente de archivos Excel y puede ser útil para identificar la fuente o el propósito de los datos leídos.
+		/// Guarda el contexto de la pestaña o sección del archivo leído, como "ENERO 2026", "URBANO", etc.
 		/// </summary>
 		public string ContextoPestaña { get; set; }
 
 		/// <summary>
-		/// Guarda los errores estructurales encontrados durante la lectura del archivo físico, como problemas de formato, delimitadores incorrectos o extensiones no soportadas. Estos errores deben ser revisados antes de proceder con el mapeo y la validación de los datos.
+		/// Guarda los errores estructurales encontrados durante la lectura del archivo físico.
 		/// </summary>
 		public List<string> ErroresEstructurales { get; set; } = new List<string>();
 	}
 
 	/// <summary>
-	/// Fase 1 del ETL: Extrae la información de cualquier archivo físico y la convierte en un DataTable en memoria.
+	/// Fase 1 del ETL: Extrae la información de cualquier archivo físico y la convierte en DataTables en memoria.
 	/// </summary>
 	public static class LectorUniversal
 	{
 		/// <summary>
-		/// Lee un archivo físico (Excel, TXT, CSV) y devuelve un objeto ResultadoLecturaCruda que contiene la tabla cruda en memoria, el contexto de la pestaña y cualquier error estructural encontrado durante la lectura.
+		/// Lee un archivo físico (Excel, TXT, CSV) y devuelve una LISTA de Resultados (Soporta múltiples pestañas).
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <param name="extension"></param>
 		/// <returns></returns>
-		public static ResultadoLecturaCruda LeerArchivo(string rutaArchivo, string extension)
+		public static List<ResultadoLecturaCruda> LeerArchivo(string rutaArchivo, string extension)
 		{
-			var resultado = new ResultadoLecturaCruda();
+			var resultados = new List<ResultadoLecturaCruda>();
 			string ext = extension.ToLower().Trim();
 
 			try
 			{
 				if (ext == ".xlsx" || ext == ".xls")
 				{
-					resultado = LeerExcel(rutaArchivo);
+					// 🚀 Devuelve una lista con todas las pestañas válidas
+					resultados = LeerExcel(rutaArchivo);
 				}
 				else if (ext == ".txt" || ext == ".csv")
 				{
-					resultado = LeerTextoPlano(rutaArchivo);
+					// Los TXT/CSV solo tienen "una pestaña", así que lo agregamos como elemento único
+					resultados.Add(LeerTextoPlano(rutaArchivo));
 				}
 				else
 				{
-					resultado.ErroresEstructurales.Add($"Extensión no soportada: {ext}");
+					var resError = new ResultadoLecturaCruda();
+					resError.ErroresEstructurales.Add($"Extensión no soportada: {ext}");
+					resultados.Add(resError);
 				}
 			}
 			catch (Exception ex)
 			{
-				resultado.ErroresEstructurales.Add($"Error fatal al leer el archivo físico: {ex.Message}");
+				var resError = new ResultadoLecturaCruda();
+				resError.ErroresEstructurales.Add($"Error fatal al leer el archivo físico: {ex.Message}");
+				resultados.Add(resError);
 			}
 
-			return resultado;
+			return resultados;
 		}
 
 		/// <summary>
-		/// Lee un archivo Excel (.xlsx o .xls) y devuelve un objeto ResultadoLecturaCruda que contiene la tabla cruda en memoria, el contexto de la pestaña y cualquier error estructural encontrado durante la lectura.
+		/// Lee un archivo Excel (.xlsx o .xls) iterando por todas sus hojas (pestañas).
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <returns></returns>
-		private static ResultadoLecturaCruda LeerExcel(string rutaArchivo)
+		private static List<ResultadoLecturaCruda> LeerExcel(string rutaArchivo)
 		{
-			var resultado = new ResultadoLecturaCruda { TablaCruda = new DataTable() };
+			var listaResultados = new List<ResultadoLecturaCruda>();
 
 			using (var stream = File.Open(rutaArchivo, FileMode.Open, FileAccess.Read))
 			using (var reader = ExcelReaderFactory.CreateReader(stream))
 			{
-				// Extraemos el nombre de la primera pestaña válida como contexto
-				resultado.ContextoPestaña = reader.Name?.ToUpper().Trim();
-
 				// Convertimos todo el Excel a un DataSet crudo
 				var result = reader.AsDataSet(new ExcelDataSetConfiguration()
 				{
@@ -93,24 +97,41 @@ namespace swCargaMasivaIngresos.Services
 
 				if (result.Tables.Count > 0)
 				{
-					resultado.TablaCruda = result.Tables[0];
+					// 🚀 ITERAMOS POR CADA PESTAÑA DEL EXCEL
+					foreach (DataTable tabla in result.Tables)
+					{
+						// Ignoramos pestañas que el usuario haya dejado completamente en blanco
+						if (tabla.Rows.Count == 0) continue;
+
+						listaResultados.Add(new ResultadoLecturaCruda
+						{
+							TablaCruda = tabla,
+							// Extraemos el nombre real de ESTA pestaña en específico
+							ContextoPestaña = tabla.TableName?.ToUpper().Trim()
+						});
+					}
 				}
-				else
+
+				// Si por alguna razón todas las pestañas estaban vacías
+				if (listaResultados.Count == 0)
 				{
-					resultado.ErroresEstructurales.Add("El archivo Excel está vacío o no tiene hojas.");
+					var resError = new ResultadoLecturaCruda();
+					resError.ErroresEstructurales.Add("El archivo Excel está vacío o no tiene hojas con datos.");
+					listaResultados.Add(resError);
 				}
 			}
-			return resultado;
+
+			return listaResultados;
 		}
 
 		/// <summary>
-		/// Lee un archivo de texto plano (.txt o .csv) y devuelve un objeto ResultadoLecturaCruda que contiene la tabla cruda en memoria, el contexto de la pestaña y cualquier error estructural encontrado durante la lectura.
+		/// Lee un archivo de texto plano (.txt o .csv) con detección automática de delimitadores.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <returns></returns>
 		private static ResultadoLecturaCruda LeerTextoPlano(string rutaArchivo)
 		{
-			var resultado = new ResultadoLecturaCruda { TablaCruda = new DataTable() };
+			var resultado = new ResultadoLecturaCruda { TablaCruda = new DataTable(), ContextoPestaña = "TXT_CSV" };
 			var lineas = new List<string[]>();
 			char delimitadorDescubierto = '|'; // Por defecto
 
@@ -119,19 +140,16 @@ namespace swCargaMasivaIngresos.Services
 				string primeraLinea = null;
 				while ((primeraLinea = reader.ReadLine()) != null)
 				{
-					if (!string.IsNullOrWhiteSpace(primeraLinea)) break; // Ya encontró texto
+					if (!string.IsNullOrWhiteSpace(primeraLinea)) break;
 				}
 
 				if (string.IsNullOrWhiteSpace(primeraLinea))
-					return resultado; // Archivo vacío
+					return resultado;
 
-				// 🚀 SOLUCIÓN AL CSV MAL FORMADO:
-				// Evaluamos si viene separado por comas, pipes o tabuladores basándonos en la primera línea
 				if (primeraLinea.Contains("|")) delimitadorDescubierto = '|';
 				else if (primeraLinea.Contains(",")) delimitadorDescubierto = ',';
 				else if (primeraLinea.Contains("\t")) delimitadorDescubierto = '\t';
 
-				// Reprocesamos la primera línea
 				lineas.Add(primeraLinea.Split(delimitadorDescubierto));
 
 				string lineaActual;
@@ -144,14 +162,12 @@ namespace swCargaMasivaIngresos.Services
 				}
 			}
 
-			// Normalizamos el número de columnas basado en la fila más ancha encontrada
 			int maxColumnas = lineas.Max(l => l.Length);
 			for (int i = 0; i < maxColumnas; i++)
 			{
 				resultado.TablaCruda.Columns.Add($"Columna_{i}");
 			}
 
-			// Llenamos el DataTable
 			foreach (var filaArr in lineas)
 			{
 				var row = resultado.TablaCruda.NewRow();
