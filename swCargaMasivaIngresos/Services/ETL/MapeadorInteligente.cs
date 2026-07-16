@@ -72,52 +72,65 @@ namespace swCargaMasivaIngresos.Services
 			int filaCandidata = -1;
 
 			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] === ESCANEANDO PESTAÑA: {tabla.TableName} | Filas Totales: {tabla.Rows.Count} ===").Wait();
+			// 1. ZONA A: Búsqueda Heurística por Ponderación Estructural (El "Escáner")
+			
+			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] === ESCANEANDO PESTAÑA: {tabla.TableName} | Filas Totales: {tabla.Rows.Count} ===").Wait();
+
+			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] === ESCANEANDO PESTAÑA: {tabla.TableName} | Filas Totales: {tabla.Rows.Count} ===").Wait();
 
 			for (int i = 0; i < Math.Min(50, tabla.Rows.Count); i++)
 			{
 				var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
 				int celdasLlenas = celdas.Count(x => !string.IsNullOrWhiteSpace(x));
 
-				// Si la fila está vacía, la ignoramos completamente
+				// Si la fila está vacía, no tiene caso analizarla
 				if (celdasLlenas == 0) continue;
 
 				string textoFila = string.Join(" ", celdas).ToUpper();
 				int puntajeFila = 0;
 
-				// 📊 CRITERIO 1: Densidad Horizontal (Peso ligero)
-				// Entre más columnas tenga, más probable es que sea la tabla principal y no un subtítulo.
+				// 📊 CRITERIO 1: Densidad Horizontal (Aporta balance según el ancho de la tabla)
 				puntajeFila += celdasLlenas;
 
-				// 📊 CRITERIO 2: Palabras Clave Core (Peso pesado)
-				// Estas palabras gritan "¡Soy el encabezado de los datos!"
+				// 📊 CRITERIO 2: Palabras Clave Core (Peso pesado - Identificadores únicos de negocio)
 				if (textoFila.Contains("CUENTA") || textoFila.Contains("CTA")) puntajeFila += 10;
-				if (textoFila.Contains("PREDIO")) puntajeFila += 10;
+				if (textoFila.Contains("PREDIO") || textoFila.Contains("PREDIAL")) puntajeFila += 10;
 				if (textoFila.Contains("BIMESTRE")) puntajeFila += 10;
 				if (textoFila.Contains("CLASE")) puntajeFila += 10;
-				if (textoFila.Contains("IMPUESTO") || textoFila.Contains("REDUCCION")) puntajeFila += 10;
+				if (textoFila.Contains("IMPUESTO") || textoFila.Contains("REDUCCION") || textoFila.Contains("IMPORTE")) puntajeFila += 10;
 
-				// 📊 CRITERIO 3: Palabras Clave Suaves (Peso medio)
-				// Pueden estar en el título o en la tabla.
+				// 📊 CRITERIO 3: Palabras Clave Suaves (Peso medio - Contexto general)
 				if (textoFila.Contains("MUNICIPIO")) puntajeFila += 3;
 				if (textoFila.Contains("FECHA")) puntajeFila += 3;
 				if (textoFila.Contains("NOMBRE")) puntajeFila += 3;
 
-				// 📊 CRITERIO 4: Análisis de Contexto Vecino (Lo que tú sugeriste)
-				// Miramos la fila inmediatamente inferior. Si abajo hay números puros (como montos, cuentas, claves), 
-				// es casi seguro que nosotros somos el encabezado.
+				// 📊 CRITERIO 4: FILTRO DEFENSIVO DE CONTENIDO (Discriminador de Datos vs. Texto)
+				// Contamos cuántas celdas son numéricas. Si representan más del 50% de las celdas llenas,
+				// significa que el renglón esminentemente numérico (un registro de cobro/padrón) y no un encabezado.
+				int numerosAqui = celdas.Count(c => decimal.TryParse(c, out _));
+				if (celdasLlenas > 0 && numerosAqui > (celdasLlenas / 2.0))
+				{
+					puntajeFila -= 100; // Descalificación inmediata
+				}
+
+				// 📊 CRITERIO 5: Validación del Ecosistema Inferior (Vecino inmediato)
 				if (i + 1 < tabla.Rows.Count)
 				{
 					var celdasAbajo = tabla.Rows[i + 1].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
 					int numerosAbajo = celdasAbajo.Count(c => decimal.TryParse(c, out _));
 
-					// Cada número en la fila de abajo nos da muchísima confianza
-					puntajeFila += (numerosAbajo * 5);
+					// Si la fila de abajo está compuesta en su mayoría por números (>50%), 
+					// incrementa drásticamente la probabilidad de que la fila actual sea el encabezado contenedor.
+					if (celdasAbajo.Count > 0 && numerosAbajo > (celdasAbajo.Count(x => !string.IsNullOrWhiteSpace(x)) / 2.0))
+					{
+						puntajeFila += 15;
+					}
 				}
 
-				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} | Llenas: {celdasLlenas} | Puntaje Calculado: {puntajeFila} | Texto: {textoFila}").Wait();
+				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} | Llenas: {celdasLlenas} | Números Aquí: {numerosAqui} | Puntaje: {puntajeFila} | Texto: {textoFila}").Wait();
 
-				// 🏆 CORONACIÓN DEL CANDIDATO
-				// Exigimos un mínimo de 15 puntos para evitar anclarnos en basura con números al azar
+				// 🏆 EVALUACIÓN DEL GANADOR
+				// Mantenemos el umbral mínimo en 15 puntos para garantizar calidad semántica básica
 				if (puntajeFila > mejorPuntaje && puntajeFila >= 15)
 				{
 					mejorPuntaje = puntajeFila;
@@ -125,7 +138,7 @@ namespace swCargaMasivaIngresos.Services
 				}
 			}
 
-			// RESULTADO DEL ESCÁNER
+			// DETERMINACIÓN FINAL
 			if (filaCandidata != -1)
 			{
 				filaEncabezado = filaCandidata;
@@ -136,6 +149,69 @@ namespace swCargaMasivaIngresos.Services
 				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", "[TRACE] -> FRACASO: Ninguna fila superó el umbral de ponderación. Abortando pestaña.").Wait();
 				return new Dictionary<string, int>();
 			}
+			//for (int i = 0; i < Math.Min(50, tabla.Rows.Count); i++)
+			//{
+			//	var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
+			//	int celdasLlenas = celdas.Count(x => !string.IsNullOrWhiteSpace(x));
+
+			//	// Si la fila está vacía, la ignoramos completamente
+			//	if (celdasLlenas == 0) continue;
+
+			//	string textoFila = string.Join(" ", celdas).ToUpper();
+			//	int puntajeFila = 0;
+
+			//	// 📊 CRITERIO 1: Densidad Horizontal (Peso ligero)
+			//	// Entre más columnas tenga, más probable es que sea la tabla principal y no un subtítulo.
+			//	puntajeFila += celdasLlenas;
+
+			//	// 📊 CRITERIO 2: Palabras Clave Core (Peso pesado)
+			//	// Estas palabras gritan "¡Soy el encabezado de los datos!"
+			//	if (textoFila.Contains("CUENTA") || textoFila.Contains("CTA")) puntajeFila += 10;
+			//	if (textoFila.Contains("PREDIO")) puntajeFila += 10;
+			//	if (textoFila.Contains("BIMESTRE")) puntajeFila += 10;
+			//	if (textoFila.Contains("CLASE")) puntajeFila += 10;
+			//	if (textoFila.Contains("IMPUESTO") || textoFila.Contains("REDUCCION")) puntajeFila += 10;
+
+			//	// 📊 CRITERIO 3: Palabras Clave Suaves (Peso medio)
+			//	// Pueden estar en el título o en la tabla.
+			//	if (textoFila.Contains("MUNICIPIO")) puntajeFila += 3;
+			//	if (textoFila.Contains("FECHA")) puntajeFila += 3;
+			//	if (textoFila.Contains("NOMBRE")) puntajeFila += 3;
+
+			//	// 📊 CRITERIO 4: Análisis de Contexto Vecino (Lo que tú sugeriste)
+			//	// Miramos la fila inmediatamente inferior. Si abajo hay números puros (como montos, cuentas, claves), 
+			//	// es casi seguro que nosotros somos el encabezado.
+			//	if (i + 1 < tabla.Rows.Count)
+			//	{
+			//		var celdasAbajo = tabla.Rows[i + 1].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
+			//		int numerosAbajo = celdasAbajo.Count(c => decimal.TryParse(c, out _));
+
+			//		// Cada número en la fila de abajo nos da muchísima confianza
+			//		puntajeFila += (numerosAbajo * 5);
+			//	}
+
+			//	LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} | Llenas: {celdasLlenas} | Puntaje Calculado: {puntajeFila} | Texto: {textoFila}").Wait();
+
+			//	// 🏆 CORONACIÓN DEL CANDIDATO
+			//	// Exigimos un mínimo de 15 puntos para evitar anclarnos en basura con números al azar
+			//	if (puntajeFila > mejorPuntaje && puntajeFila >= 15)
+			//	{
+			//		mejorPuntaje = puntajeFila;
+			//		filaCandidata = i;
+			//	}
+			//}
+
+			
+			//if (filaCandidata != -1)
+			//{
+			//	filaEncabezado = filaCandidata;
+			//	LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ANCLADO! Ganador indiscutible Fila {filaEncabezado} con {mejorPuntaje} puntos.").Wait();
+			//}
+			//else
+			//{
+			//	LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", "[TRACE] -> FRACASO: Ninguna fila superó el umbral de ponderación. Abortando pestaña.").Wait();
+			//	return new Dictionary<string, int>();
+			//}
 
 			// 2. ZONA B: Encontrar inicio de datos (Análisis Estructural Híbrido)
 			filaInicioDatos = filaEncabezado + 1;
