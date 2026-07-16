@@ -294,7 +294,7 @@ namespace swCargaMasivaIngresos.Services
 			Asignar("TipoPredio", "TIPO DE PREDIO", "PREDIO", "TIPO", "DESC_PRED");
 
 			// 🚀 2. LAS COLUMNAS OBLIGATORIAS Y PRINCIPALES
-			Asignar("CuentaPredial", "CUENTA", "PREDIAL", "CTA", "CTA.", "CLAVE");
+			Asignar("CuentaPredial", "CUENTA PREDIAL","NUMERO DE CUENTA", "NO. CUENTA", "CUENTA", "CTA", "CTA.", "CLAVE");
 			Asignar("Anio", "AÑO", "EJERCICIO", "EJERCICIO FISCAL");
 			//Asignar("ImpuestoDeterminado", "SALDO", "TOTAL", "PAGO", "IMPUESTO", "IMPORTE", "TOTAL.*BRUTO", "IMPUESTO.*TOTAL");
 			// Obtenemos el año en curso para blindarlo a futuro
