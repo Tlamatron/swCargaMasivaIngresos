@@ -5,23 +5,27 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
 {
 	/// <summary>
-	/// Clase encargada de procesar archivos de texto plano (TXT) que contienen información de reducciones. Implementa la interfaz IProcesadorFormato y se encarga de validar el layout del archivo, realizar validaciones de negocio, almacenar temporalmente los registros en una tabla en memoria (DataTable) y finalmente insertar los datos en la base de datos utilizando SqlBulkCopy y un procedimiento almacenado para consolidar la información.
+	/// Clase encargada de procesar archivos de texto plano (TXT) que contienen información de reducciones. 
+	/// Implementa la interfaz IProcesadorFormato de forma asíncrona.
 	/// </summary>
 	public class ProcesadorReduccionesTXT : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
-		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
+		/// <summary>
+		/// Método principal asíncrono que procesa el archivo TXT de reducciones, validando el layout y ejecutando la carga masiva.
+		/// </summary>
+		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
 			DataTable tablaLote = CrearEstructuraReducciones();
-			//HashSet<string> reduccionesProcesadas = new HashSet<string>();
 
-			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorReduccionesTXT", $"Inicia lectura de archivo de Descuentos. Folio: {param.FolioCarga}");
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorReduccionesTXT", $"Inicia lectura de archivo de Descuentos. Folio: {param.FolioCarga}").Wait();
 
 			using (var reader = new StreamReader(rutaArchivo, Encoding.UTF8))
 			{
@@ -32,7 +36,7 @@ namespace swCargaMasivaIngresos.Services
 				bool esPrimerRenglon = true;
 				bool tieneEncabezados = false;
 
-				while ((linea = reader.ReadLine()) != null)
+				while ((linea = await reader.ReadLineAsync()) != null)
 				{
 					numeroLinea++;
 					if (string.IsNullOrWhiteSpace(linea)) continue;
@@ -40,18 +44,18 @@ namespace swCargaMasivaIngresos.Services
 					string[] col = linea.Split('|');
 
 					// =================================================================
-					// 🚀 LÓGICA HÍBRIDA (PROPUESTA DEL USUARIO)
+					// 🚀 LÓGICA HÍBRIDA (Detección de Encabezados)
 					// =================================================================
 					if (esPrimerRenglon)
 					{
 						esPrimerRenglon = false;
 
-						// Evaluamos si es un encabezado (contiene texto descriptivo)
+						// Evaluamos si es un encabezado
 						if (linea.ToUpper().Contains("MUNICIPIO") || linea.ToUpper().Contains("CLAVE") || linea.ToUpper().Contains("CUENTA"))
 						{
 							tieneEncabezados = true;
-							idxFolio = -1; // Lo apagamos hasta confirmar que existe
-							idxReduccion = -1; // Lo apagamos hasta confirmar que existe
+							idxFolio = -1;
+							idxReduccion = -1;
 
 							for (int i = 0; i < col.Length; i++)
 							{
@@ -62,14 +66,14 @@ namespace swCargaMasivaIngresos.Services
 								else if (header.Contains("FOLIO")) idxFolio = i;
 								else if (header.Contains("REDUCCION") || header.Contains("REDUCCIÓN") || header.Contains("TIPO RED")) idxReduccion = i;
 							}
-							continue; // Saltamos esta línea porque solo eran títulos
+							continue;
 						}
 						else
 						{
 							// MODO ESTRICTO (No hay encabezados)
 							if (col.Length == 4)
 							{
-								idxFolio = -1; // Omitieron el folio opcional
+								idxFolio = -1;
 								idxReduccion = 3;
 							}
 							else if (col.Length < 4)
@@ -89,7 +93,6 @@ namespace swCargaMasivaIngresos.Services
 						continue;
 					}
 
-					// Validar que la fila actual tenga la longitud suficiente según nuestro mapeo
 					int maxIndexRequired = Math.Max(idxMpio, Math.Max(idxTipo, Math.Max(idxCuenta, idxReduccion)));
 					if (col.Length <= maxIndexRequired)
 					{
@@ -105,7 +108,6 @@ namespace swCargaMasivaIngresos.Services
 					string cuentaPredial = col[idxCuenta].Trim();
 					string tipoReduccion = col[idxReduccion].Trim();
 
-					// Extracción opcional del Folio
 					string folioUnico = "";
 					if (idxFolio != -1 && col.Length > idxFolio)
 					{
@@ -113,7 +115,7 @@ namespace swCargaMasivaIngresos.Services
 					}
 
 					// =================================================================
-					// 3. VALIDACIONES ESTRICTAS DE NEGOCIO (Igual que antes)
+					// 3. VALIDACIONES ESTRICTAS DE NEGOCIO
 					// =================================================================
 					if (string.IsNullOrEmpty(cuentaPredial))
 					{
@@ -121,10 +123,18 @@ namespace swCargaMasivaIngresos.Services
 						continue;
 					}
 
+					// 🚀 FALLBACK SEGURO DE MUNICIPIO
 					if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 					{
-						MarcarError(resultado, numeroLinea, $"Clave de municipio '{claveMunicipio}' inválida.");
-						continue;
+						if (param.ClaveMunicipioDestino > 0)
+						{
+							claveMun = (short)param.ClaveMunicipioDestino; // Cast explícito
+						}
+						else
+						{
+							MarcarError(resultado, numeroLinea, $"Clave de municipio '{claveMunicipio}' inválida.");
+							continue;
+						}
 					}
 
 					if (!byte.TryParse(tipoPredio, out byte tipoPre) || tipoPre < 1 || tipoPre > 3)
@@ -139,16 +149,7 @@ namespace swCargaMasivaIngresos.Services
 						continue;
 					}
 
-					// 4. Evitar filas duplicadas idénticas en el mismo TXT
-					//string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{tipoRed}";
-					//if (reduccionesProcesadas.Contains(llaveUnica))
-					//{
-					//	MarcarError(resultado, numeroLinea, $"La cuenta {cuentaPredial} ya tiene asignado el descuento {tipoRed} en este archivo.");
-					//	continue;
-					//}
-					//reduccionesProcesadas.Add(llaveUnica);
-
-					// 5. Agregar a la tabla en memoria (Staging)
+					// 5. Agregar a la tabla en memoria
 					tablaLote.Rows.Add(
 						claveMun.ToString(),
 						tipoPre.ToString(),
@@ -162,23 +163,36 @@ namespace swCargaMasivaIngresos.Services
 
 					if (tablaLote.Rows.Count >= 10000)
 					{
-						InsertarLoteEnBD(tablaLote, param);
+						await InsertarLoteEnBDAsync(tablaLote, param);
 						tablaLote.Clear();
 					}
 				}
 
-				if (tablaLote.Rows.Count > 0) InsertarLoteEnBD(tablaLote, param);
+				if (tablaLote.Rows.Count > 0)
+				{
+					await InsertarLoteEnBDAsync(tablaLote, param);
+				}
 			}
 
 			return resultado;
 		}
 
+		/// <summary>
+		/// Método privado que marca un error en el resultado del proceso, incrementando el contador de registros fallidos y agregando un mensaje de error detallado con la línea correspondiente.
+		/// </summary>
+		/// <param name="res"></param>
+		/// <param name="linea"></param>
+		/// <param name="msg"></param>
 		private void MarcarError(ResultadoProceso res, int linea, string msg)
 		{
 			res.RegistrosFallidos++;
 			res.ErroresDetalle.Add($"Línea {linea}: {msg}");
 		}
 
+		/// <summary>
+		/// Método privado que crea y devuelve la estructura de DataTable para almacenar temporalmente los registros de reducciones antes de insertarlos en la base de datos. La tabla contiene las columnas necesarias para representar cada registro de reducción, incluyendo ClaveMunicipio, TipoPredio, CuentaPredial, FolioUnico, TipoReduccion y FolioCarga.
+		/// </summary>
+		/// <returns></returns>
 		private DataTable CrearEstructuraReducciones()
 		{
 			var tabla = new DataTable();
@@ -191,25 +205,41 @@ namespace swCargaMasivaIngresos.Services
 			return tabla;
 		}
 
-		private void InsertarLoteEnBD(DataTable lote, ParametrosCarga param)
+		/// <summary>
+		/// Método privado asíncrono para ejecutar la ingesta masiva de reducciones.
+		/// Nota: La consolidación lógica queda comentada hasta que se defina la regla de negocio.
+		/// </summary>
+		private async Task InsertarLoteEnBDAsync(DataTable lote, ParametrosCarga param)
 		{
-			using (SqlConnection conn = new SqlConnection(CadenaConexion))
+			try
 			{
-				conn.Open();
-
-				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
+				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				{
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Reducciones";
-					bulkCopy.WriteToServer(lote);
-				}
+					await conn.OpenAsync();
 
-				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeReducciones", conn))
-				{
-					cmd.CommandType = CommandType.StoredProcedure;
-					cmd.CommandTimeout = 180;
-					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
-					cmd.ExecuteNonQuery();
+					using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
+					{
+						bulkCopy.DestinationTableName = "pred_Operacion.Staging_Reducciones";
+						bulkCopy.BatchSize = 10000;
+						bulkCopy.BulkCopyTimeout = 120;
+
+						await bulkCopy.WriteToServerAsync(lote);
+					}
+
+					using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeReducciones", conn))
+					{
+						cmd.CommandType = CommandType.StoredProcedure;
+						cmd.CommandTimeout = 180;
+						cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
+
+						await cmd.ExecuteNonQueryAsync();
+					}
 				}
+			}
+			catch (SqlException ex)
+			{
+				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "SqlBulkCopy/SP Reducciones TXT", ex.Message).Wait();
+				throw;
 			}
 		}
 	}

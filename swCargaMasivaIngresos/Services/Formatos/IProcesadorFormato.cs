@@ -1,5 +1,6 @@
 ﻿using swCargaMasivaIngresos.Models; // Importamos el modelo correcto
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -9,12 +10,12 @@ namespace swCargaMasivaIngresos.Services
 	public interface IProcesadorFormato
 	{
 		/// <summary>
-		/// Método que procesa un archivo de entrada, lee sus datos y los inserta en la base de datos según el formato específico implementado. Devuelve un objeto ResultadoProceso que contiene información sobre el número de registros exitosos, fallidos y detalles de errores.
+		/// Método asíncrono que procesa un archivo de entrada, lee sus datos y los inserta en la base de datos según el formato específico implementado. Devuelve un objeto ResultadoProceso que contiene información sobre el número de registros exitosos, fallidos y detalles de errores.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
-		/// <param name="parametros"></param>
+		/// <param name="param"></param>
 		/// <returns></returns>
-		ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga parametros);
+		Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param);
 	}
 
 	

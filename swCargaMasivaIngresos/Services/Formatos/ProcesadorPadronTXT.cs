@@ -5,6 +5,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -16,18 +17,17 @@ namespace swCargaMasivaIngresos.Services
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
-		/// Método principal para procesar el archivo de texto plano del padrón catastral.
+		/// Método principal asíncrono para procesar el archivo de texto plano del padrón catastral.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <param name="param"></param>
 		/// <returns></returns>
-		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
+		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
 			DataTable tablaLote = CrearEstructuraPadron();
-			//HashSet<string> cuentasProcesadas = new HashSet<string>();
 
-			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT", $"Inicia lectura de archivo Folio: {param.FolioCarga}");
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT", $"Inicia lectura de archivo Folio: {param.FolioCarga}").Wait();
 
 			using (var reader = new StreamReader(rutaArchivo, Encoding.UTF8))
 			{
@@ -38,7 +38,7 @@ namespace swCargaMasivaIngresos.Services
 				char delimitador = '|'; // Pipe por defecto
 				bool delimitadorDetectado = false;
 
-				while ((linea = reader.ReadLine()) != null)
+				while ((linea = await reader.ReadLineAsync()) != null)
 				{
 					numeroLinea++;
 					if (string.IsNullOrWhiteSpace(linea)) continue;
@@ -64,7 +64,7 @@ namespace swCargaMasivaIngresos.Services
 						continue;
 					}
 
-					// Extraemos los componentes clave (El resto del código se queda exactamente igual)
+					// Extraemos los componentes clave
 					string claveMunicipio = col[0].Trim();
 					string tipoPredio = col[1].Trim();
 					string cuentaPredial = col[2].Trim();
@@ -82,8 +82,16 @@ namespace swCargaMasivaIngresos.Services
 					// Columna 1: Clave Municipio (Obligatorio, numérico de 1 a 217)
 					if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 					{
-						MarcarError(resultado, numeroLinea, "Clave de municipio inválida (Debe ser numérico entre 1 y 217).");
-						continue;
+						// Fallback de seguridad (Opcional, pero recomendado en TXT también)
+						if (param.ClaveMunicipioDestino > 0)
+						{
+							claveMun = (short)param.ClaveMunicipioDestino;
+						}
+						else
+						{
+							MarcarError(resultado, numeroLinea, "Clave de municipio inválida (Debe ser numérico entre 1 y 217).");
+							continue;
+						}
 					}
 
 					// Columna 2: Tipo de Predio (Obligatorio, numérico de 1 a 3)
@@ -95,7 +103,6 @@ namespace swCargaMasivaIngresos.Services
 
 					// Columna 4: Folio Único (Opcional, numérico BIGINT)
 					string folioUnicoStr = col[3].Trim();
-					// 1. Limpiamos cadenas que los sistemas suelen exportar en lugar de vacíos
 					if (folioUnicoStr.Equals("NULL", StringComparison.OrdinalIgnoreCase) ||
 						folioUnicoStr.Equals("NA", StringComparison.OrdinalIgnoreCase) ||
 						folioUnicoStr.Equals("-", StringComparison.OrdinalIgnoreCase))
@@ -103,21 +110,14 @@ namespace swCargaMasivaIngresos.Services
 						folioUnicoStr = string.Empty;
 					}
 
-					// 2. Si realmente trae un valor, validamos que sea numérico
 					if (!string.IsNullOrWhiteSpace(folioUnicoStr))
 					{
 						if (!long.TryParse(folioUnicoStr, out _))
 						{
-							// 🚀 AHORA EL ERROR TE DIRÁ EXACTAMENTE QUÉ TEXTO RECIBIÓ
 							MarcarError(resultado, numeroLinea, $"Folio Único inválido. Se esperaba numérico pero se recibió: '{folioUnicoStr}'");
 							continue;
 						}
 					}
-					//if (!string.IsNullOrWhiteSpace(col[3]) && !long.TryParse(col[3].Trim(), out _))
-					//{
-					//	MarcarError(resultado, numeroLinea, "Folio Único inválido (Debe ser exclusivamente numérico).");
-					//	continue;
-					//}
 
 					// Columna 15: Tipo de Persona (Opcional, pero si viene debe ser 1 o 2)
 					if (!string.IsNullOrWhiteSpace(col[14]))
@@ -129,32 +129,32 @@ namespace swCargaMasivaIngresos.Services
 						}
 					}
 
-					// Columna 21: Clase de Pago (Obligatorio, 1 o 2)
-					if (!byte.TryParse(col[20].Trim(), out byte clasePago) || (clasePago != 1 && clasePago != 2))
+					// 🚀 LÓGICA DE BANDERAS 99 (Clase de Pago y Bimestre)
+					string clasePagoStr = col[20].Trim();
+					string bimestreStr = col[21].Trim();
+
+					byte clasePago = 99; // Bandera por defecto
+					byte bimestre = 99;  // Bandera por defecto
+
+					if (!string.IsNullOrWhiteSpace(clasePagoStr))
 					{
-						MarcarError(resultado, numeroLinea, "Clase de Pago inválida (1=Anual, 2=Bimestral).");
-						continue;
+						if (!byte.TryParse(clasePagoStr, out clasePago) || (clasePago != 1 && clasePago != 2))
+						{
+							MarcarError(resultado, numeroLinea, "Clase de Pago inválida (1=Anual, 2=Bimestral).");
+							continue;
+						}
 					}
 
-					// Columna 22: Bimestre (Obligatorio, 0 al 6)
-					if (!byte.TryParse(col[21].Trim(), out byte bimestre) || bimestre > 6)
+					if (!string.IsNullOrWhiteSpace(bimestreStr))
 					{
-						MarcarError(resultado, numeroLinea, "Bimestre inválido (Debe ser un número del 0 al 6).");
-						continue;
+						if (!byte.TryParse(bimestreStr, out bimestre) || bimestre > 6)
+						{
+							MarcarError(resultado, numeroLinea, "Bimestre inválido (Debe ser un número del 0 al 6).");
+							continue;
+						}
 					}
 
 					// ====================================================================
-
-					// Validar duplicados exactos en el archivo (Llave Compuesta)
-					//string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}";
-					//string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{bimestre}";
-					//if (cuentasProcesadas.Contains(llaveUnica))
-					//{
-					//	//MarcarError(resultado, numeroLinea, $"El predio con Cuenta {cuentaPredial} y Tipo {tipoPre} viene duplicado en el archivo.");
-					//	MarcarError(resultado, numeroLinea, $"El predio con Cuenta {cuentaPredial} tiene el Bimestre {bimestre} duplicado en el archivo.");
-					//	continue;
-					//}
-					//cuentasProcesadas.Add(llaveUnica);
 
 					// Validaciones de moneda y fechas
 					decimal baseGravable = 0;
@@ -205,8 +205,8 @@ namespace swCargaMasivaIngresos.Services
 						Utilerias.LimpiarCadena(col[17], 10), // 18. Uso SAT
 						Utilerias.LimpiarCadena(col[18], 10), // 19. CP Fiscal (Conserva ceros)
 						baseGravable,                         // 20. Base Gravable
-						clasePago.ToString(),                 // 21. Ya validado
-						bimestre.ToString(),                  // 22. Ya validado
+						clasePago.ToString(),                 // 21. Ya validado o Bandera 99
+						bimestre.ToString(),                  // 22. Ya validado o Bandera 99
 						impuestoPagar,                        // 23. Impuesto Determinado
 						fechaVigencia,                        // 24. Fecha Vigencia
 						param.FolioCarga                      // Columna de Control
@@ -217,16 +217,21 @@ namespace swCargaMasivaIngresos.Services
 					// 4. Inserción masiva si se alcanza el tamaño del lote
 					if (tablaLote.Rows.Count >= 10000)
 					{
-						InsertarLoteEnBD(tablaLote, param);
+						List<string> erroresLogicos = await InsertarLoteEnBDAsync(tablaLote, param);
+						if (erroresLogicos.Count > 0) resultado.ErroresDetalle.AddRange(erroresLogicos);
 						tablaLote.Clear();
 					}
 				}
 
-				if (tablaLote.Rows.Count > 0) InsertarLoteEnBD(tablaLote, param);
+				if (tablaLote.Rows.Count > 0)
+				{
+					List<string> erroresLogicos = await InsertarLoteEnBDAsync(tablaLote, param);
+					if (erroresLogicos.Count > 0) resultado.ErroresDetalle.AddRange(erroresLogicos);
+				}
 			}
 
 			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT",
-				$"Fin. Éxitos: {resultado.RegistrosExitosos}, Errores: {resultado.ErroresDetalle.Count}");
+				$"Fin. Éxitos: {resultado.RegistrosExitosos}, Errores: {resultado.ErroresDetalle.Count}").Wait();
 
 			return resultado;
 		}
@@ -234,9 +239,6 @@ namespace swCargaMasivaIngresos.Services
 		/// <summary>
 		/// Marca un error en el resultado del proceso, incrementando el contador de registros fallidos y agregando un detalle del error.
 		/// </summary>
-		/// <param name="res"></param>
-		/// <param name="linea"></param>
-		/// <param name="msg"></param>
 		private void MarcarError(ResultadoProceso res, int linea, string msg)
 		{
 			res.RegistrosFallidos++;
@@ -244,9 +246,8 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Método privado que crea la estructura de un DataTable para almacenar temporalmente los datos del padrón antes de ser insertados en la base de datos. Define las columnas necesarias y sus tipos de datos.
+		/// Método privado que crea la estructura de un DataTable para almacenar temporalmente los datos del padrón antes de ser insertados en la base de datos.
 		/// </summary>
-		/// <returns></returns>
 		private DataTable CrearEstructuraPadron()
 		{
 			var tabla = new DataTable();
@@ -280,43 +281,62 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Método privado que realiza la inserción masiva de un lote de datos en la base de datos utilizando SqlBulkCopy y posteriormente llama a un procedimiento almacenado para procesar el MERGE de los datos. Maneja excepciones de SQL y registra errores en caso de fallas.
+		/// Método privado asíncrono que realiza la inserción masiva en Staging, ejecuta la ingesta al Padrón, y finalmente consolida los adeudos devolviendo los errores.
 		/// </summary>
-		/// <param name="lote"></param>
-		/// <param name="param"></param>
-		private void InsertarLoteEnBD(DataTable lote, ParametrosCarga param)
+		private async Task<List<string>> InsertarLoteEnBDAsync(DataTable lote, ParametrosCarga param)
 		{
+			var erroresConsolidacion = new List<string>();
+
 			try
 			{
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				{
-					conn.Open();
+					await conn.OpenAsync();
 
-					// PASO 1: Inyectar masivamente a la tabla Staging (Este se mantiene con BulkCopy por rendimiento)
+					// PASO 1: Inyectar masivamente a la tabla Staging
 					using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 					{
 						bulkCopy.DestinationTableName = "pred_Operacion.Staging_Predial";
 						bulkCopy.BatchSize = 10000;
 						bulkCopy.BulkCopyTimeout = 120;
-						bulkCopy.WriteToServer(lote);
+						await bulkCopy.WriteToServerAsync(lote);
 					}
 
-					// PASO 2: Llamada al Procedimiento Almacenado que hace el MERGE
+					// PASO 2: Llamada al Procedimiento Almacenado que hace el MERGE (Ingesta Inicial)
 					using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergePadron", conn))
 					{
 						cmd.CommandType = CommandType.StoredProcedure;
-						cmd.CommandTimeout = 180; // 3 minutos máximo para procesar millones de registros
+						cmd.CommandTimeout = 180;
 						cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
+						await cmd.ExecuteNonQueryAsync();
+					}
 
-						cmd.ExecuteNonQuery();
+					// 🚀 PASO 3: NUEVA CONSOLIDACIÓN Y CAPTURA DE ERRORES LÓGICOS
+					using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
+					{
+						cmdConsolidacion.CommandType = CommandType.StoredProcedure;
+						cmdConsolidacion.CommandTimeout = 180;
+						cmdConsolidacion.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
+
+						using (var reader = await cmdConsolidacion.ExecuteReaderAsync())
+						{
+							while (await reader.ReadAsync())
+							{
+								string cuenta = reader["CuentaPredial"].ToString();
+								string mensaje = reader["MensajeError"].ToString();
+								erroresConsolidacion.Add($"[Consolidación TXT] Cuenta {cuenta}: {mensaje}");
+							}
+						}
 					}
 				}
 			}
 			catch (SqlException ex)
 			{
-				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "SqlBulkCopy/SP", ex.Message).Wait();
+				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "SqlBulkCopy/SP TXT", ex.Message).Wait();
 				throw;
 			}
+
+			return erroresConsolidacion;
 		}
 	}
 }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -74,10 +75,6 @@ namespace swCargaMasivaIngresos.Services
 			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] === ESCANEANDO PESTAÑA: {tabla.TableName} | Filas Totales: {tabla.Rows.Count} ===").Wait();
 			// 1. ZONA A: Búsqueda Heurística por Ponderación Estructural (El "Escáner")
 			
-			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] === ESCANEANDO PESTAÑA: {tabla.TableName} | Filas Totales: {tabla.Rows.Count} ===").Wait();
-
-			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] === ESCANEANDO PESTAÑA: {tabla.TableName} | Filas Totales: {tabla.Rows.Count} ===").Wait();
-
 			for (int i = 0; i < Math.Min(50, tabla.Rows.Count); i++)
 			{
 				var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
@@ -112,7 +109,7 @@ namespace swCargaMasivaIngresos.Services
 				{
 					puntajeFila -= 100; // Descalificación inmediata
 				}
-
+			
 				// 📊 CRITERIO 5: Validación del Ecosistema Inferior (Vecino inmediato)
 				if (i + 1 < tabla.Rows.Count)
 				{

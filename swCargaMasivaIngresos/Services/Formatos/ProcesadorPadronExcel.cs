@@ -6,8 +6,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using static System.Net.WebRequestMethods;
-using File = System.IO.File;
+using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -19,12 +18,12 @@ namespace swCargaMasivaIngresos.Services
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
-		/// Método Procesar que recibe la ruta del archivo Excel y los parámetros de carga, y realiza la lectura, mapeo, limpieza, validación e inserción de los datos en la base de datos.
+		/// Método asíncrono que recibe la ruta del archivo Excel y los parámetros de carga, y realiza la lectura, mapeo, limpieza, validación e inserción/consolidación de los datos en la base de datos.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <param name="param"></param>
 		/// <returns></returns>
-		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
+		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 
@@ -52,8 +51,6 @@ namespace swCargaMasivaIngresos.Services
 
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraPadronCompleta();
-
-						//HashSet<string> cuentasProcesadas = new HashSet<string>();
 
 						// 🚀 2. EXTRACCIÓN
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
@@ -86,19 +83,17 @@ namespace swCargaMasivaIngresos.Services
 								claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
 							}
 
-							// --- DATOS SEMI-OBLIGATORIOS (Tienen fallback de seguridad) ---
-							string clasePago = MapeadorInteligente.Extraer(fila, mapaBloqueado, "ClasePago");
-							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "1";
+							// --- DATOS SEMI-OBLIGATORIOS (Alineados con la bandera 99) ---
+							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "99");
 
 							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
-							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "0";
+							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
 
 							// Lógica de Fechas de Excel (Con Fallback Lógico)
-							string fechaVigencia = MapeadorInteligente.Extraer(fila, mapaBloqueado, "FechaVigencia").Trim();
+							string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
 
 							if (string.IsNullOrWhiteSpace(fechaVigencia))
 							{
-								// 🚀 REGLA DE NEGOCIO: Si el municipio no manda fecha, la vigencia es el día de la carga.
 								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
 							}
 							else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
@@ -110,16 +105,7 @@ namespace swCargaMasivaIngresos.Services
 								fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
 							}
 
-							//string llaveUnica = $"{claveMunicipio}-{tipoPredio}-{cuentaPredial}";
-							//if (cuentasProcesadas.Contains(llaveUnica))
-							//{
-							//	resultadoFinal.RegistrosFallidos++;
-							//	resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El predio con cuenta {cuentaPredial} viene repetido en el archivo.");
-							//	continue;
-							//}
-							//cuentasProcesadas.Add(llaveUnica);
-
-							// 🚀 2. LLENADO DE LA TABLA (Con extracción segura de las 24 columnas)
+							// 🚀 2. LLENADO DE LA TABLA
 							DataRow nuevaFila = tablaCrudos.NewRow();
 							nuevaFila["ClaveMunicipio"] = claveMunicipio;
 							nuevaFila["TipoPredio"] = tipoPredio;
@@ -154,12 +140,23 @@ namespace swCargaMasivaIngresos.Services
 
 						if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 						{
-							InsertarBulkPadronCompleto(resultadoLimpieza.TablaValidos, param);
+							// 🚀 3. EJECUCIÓN ASÍNCRONA DE LA INGESTA Y CONSOLIDACIÓN
+							List<string> erroresLogicos = await InsertarBulkPadronCompletoAsync(resultadoLimpieza.TablaValidos, param);
+
+							// Sumamos los errores lógicos a la lista global para el correo
+							if (erroresLogicos.Any())
+							{
+								resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
+							}
 						}
 
 						resultadoFinal.RegistrosExitosos += resultadoLimpieza.TablaValidos.Rows.Count;
 						resultadoFinal.RegistrosFallidos += resultadoLimpieza.TablaRechazados.Rows.Count;
-						if (resultadoLimpieza.DetallesErrores != null) resultadoFinal.ErroresDetalle.AddRange(resultadoLimpieza.DetallesErrores);
+
+						if (resultadoLimpieza.DetallesErrores != null && resultadoLimpieza.DetallesErrores.Any())
+						{
+							resultadoFinal.ErroresDetalle.AddRange(resultadoLimpieza.DetallesErrores);
+						}
 					}
 				}
 			}
@@ -173,26 +170,9 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Método privado que crea la estructura de un DataTable para almacenar temporalmente los datos del padrón antes de ser insertados en la base de datos. Define las columnas necesarias y sus tipos de datos.
+		/// Crea la estructura de DataTable que representa el padrón completo con todas las columnas necesarias para la inserción masiva en la base de datos. Esta estructura incluye campos como ClaveMunicipio, TipoPredio, CuentaPredial, FolioUnico, Localidad, Calle, NumExterior, NumInterior, Letra, Colonia, CP, Nombre, PrimerApellido, SegundoApellido, TipoPersona, RFC, ClaveRegimenSAT, ClaveUsoSAT, CPFiscalSAT, BaseGravable, ClasePago, Bimestre, ImpuestoDeterminado, FechaVigencia y FolioCarga.
 		/// </summary>
 		/// <returns></returns>
-		private DataTable CrearEstructuraPadron()
-		{
-			DataTable tabla = new DataTable();
-			tabla.Columns.Add("ClaveMunicipio", typeof(string));
-			tabla.Columns.Add("TipoPredio", typeof(string));
-			tabla.Columns.Add("CuentaPredial", typeof(string));
-			tabla.Columns.Add("ClasePago", typeof(string));
-			tabla.Columns.Add("Bimestre", typeof(string));
-			tabla.Columns.Add("ImpuestoDeterminado", typeof(string));
-			tabla.Columns.Add("FechaVigencia", typeof(string));
-			tabla.Columns.Add("FolioCarga", typeof(string));
-			return tabla;
-		}
-
-		/// <summary>
-		/// Crea la estructura de 24 columnas para la tabla Staging_Predial
-		/// </summary>
 		private DataTable CrearEstructuraPadronCompleta()
 		{
 			var tabla = new DataTable();
@@ -225,21 +205,24 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Inserta el bloque de datos y dispara el SP de consolidación
+		/// Inserta el bloque de datos de forma asíncrona, dispara el SP de Ingesta y luego ejecuta la Consolidación
 		/// </summary>
-		private void InsertarBulkPadronCompleto(DataTable lote, ParametrosCarga param)
+		private async Task<List<string>> InsertarBulkPadronCompletoAsync(DataTable lote, ParametrosCarga param)
 		{
+			var erroresConsolidacion = new List<string>();
+
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
-				conn.Open();
+				await conn.OpenAsync();
 
+				// PASO 1: Inserción Masiva a Staging
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
 					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Predial";
 					bulkCopy.BatchSize = 10000;
 					bulkCopy.BulkCopyTimeout = 120;
 
-					// 🚀 3. EL MAPEO DE LAS 24 COLUMNAS PARA SQL SERVER
+					// Mapeo completo
 					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
 					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
 					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
@@ -266,66 +249,40 @@ namespace swCargaMasivaIngresos.Services
 					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
 					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
 
-					bulkCopy.WriteToServer(lote);
+					await bulkCopy.WriteToServerAsync(lote);
 				}
 
+				// PASO 2: Ingesta a PadronDestino (SP Original)
 				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergePadron", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;
 					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
-					cmd.ExecuteNonQuery();
+					await cmd.ExecuteNonQueryAsync();
 				}
-			}
-		}
-		/// <summary>
-		/// Método privado que realiza la inserción masiva de los registros válidos del padrón en la base de datos utilizando SqlBulkCopy. Se asegura de mapear correctamente las columnas del DataTable a las columnas de la tabla de destino en la base de datos.
-		/// </summary>
-		/// <param name="lote"></param>
-		private void InsertarBulkPadron(DataTable lote, ParametrosCarga param)
-		{
-			foreach (DataRow row in lote.Rows)
-			{
-				if (row["FechaVigencia"] != DBNull.Value && string.IsNullOrWhiteSpace(row["FechaVigencia"].ToString())) row["FechaVigencia"] = DBNull.Value;
-				if (row["ImpuestoDeterminado"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ImpuestoDeterminado"].ToString())) row["ImpuestoDeterminado"] = "0";
-				if (row["Bimestre"] != DBNull.Value && string.IsNullOrWhiteSpace(row["Bimestre"].ToString())) row["Bimestre"] = "0";
-				if (row["ClasePago"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ClasePago"].ToString())) row["ClasePago"] = "1";
-			}
 
-			using (SqlConnection conn = new SqlConnection(CadenaConexion))
-			{
-				conn.Open();
-
-				// 1. ADUANA: Metemos los datos a Staging
-				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
+				// 🚀 PASO 3: NUEVA CONSOLIDACIÓN Y CAPTURA DE ERRORES LÓGICOS
+				using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
 				{
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Predial";
-					bulkCopy.BatchSize = 10000;
-					bulkCopy.BulkCopyTimeout = 120;
+					cmdConsolidacion.CommandType = CommandType.StoredProcedure;
+					cmdConsolidacion.CommandTimeout = 180;
+					cmdConsolidacion.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
 
-					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
-					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
-					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
-					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
-					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
-					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
-					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
-					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
-
-					bulkCopy.WriteToServer(lote);
-				}
-
-				// 🚀 2. CONSOLIDACIÓN: El eslabón que faltaba
-				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergePadron", conn))
-				{
-					cmd.CommandType = CommandType.StoredProcedure;
-					cmd.CommandTimeout = 180;
-					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
-					cmd.ExecuteNonQuery();
+					using (var reader = await cmdConsolidacion.ExecuteReaderAsync())
+					{
+						while (await reader.ReadAsync())
+						{
+							string cuenta = reader["CuentaPredial"].ToString();
+							string mensaje = reader["MensajeError"].ToString();
+							erroresConsolidacion.Add($"[Consolidación] Cuenta {cuenta}: {mensaje}");
+						}
+					}
 				}
 			}
+
+			return erroresConsolidacion;
 		}
-		// Agrega este método al final de la clase ProcesadorPadronExcel
+
 		private string ExtraerSeguro(DataRow fila, MapeadorInteligente.MapaOficial mapa, string columna, string valorPorDefecto = "")
 		{
 			try
@@ -336,38 +293,6 @@ namespace swCargaMasivaIngresos.Services
 			catch
 			{
 				return valorPorDefecto;
-			}
-		}
-		private void InsertarBulkPadron_v01(DataTable lote)
-		{
-			foreach (DataRow row in lote.Rows)
-			{
-				if (row["FechaVigencia"] != DBNull.Value && string.IsNullOrWhiteSpace(row["FechaVigencia"].ToString())) row["FechaVigencia"] = DBNull.Value;
-				if (row["ImpuestoDeterminado"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ImpuestoDeterminado"].ToString())) row["ImpuestoDeterminado"] = "0";
-				if (row["Bimestre"] != DBNull.Value && string.IsNullOrWhiteSpace(row["Bimestre"].ToString())) row["Bimestre"] = "0";
-				if (row["ClasePago"] != DBNull.Value && string.IsNullOrWhiteSpace(row["ClasePago"].ToString())) row["ClasePago"] = "1";
-			}
-
-			using (SqlConnection conn = new SqlConnection(CadenaConexion))
-			{
-				conn.Open();
-				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
-				{
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Predial";
-					bulkCopy.BatchSize = 10000;
-					bulkCopy.BulkCopyTimeout = 120;
-
-					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
-					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
-					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
-					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
-					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
-					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
-					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
-					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
-
-					bulkCopy.WriteToServer(lote);
-				}
 			}
 		}
 	}

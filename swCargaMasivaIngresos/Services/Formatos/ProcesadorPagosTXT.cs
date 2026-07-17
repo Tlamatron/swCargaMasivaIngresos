@@ -5,6 +5,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -16,18 +17,17 @@ namespace swCargaMasivaIngresos.Services
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
-		/// Método principal que procesa un archivo de pagos en formato TXT. Lee el archivo línea por línea, valida cada registro, y si es válido, lo agrega a una tabla en memoria. Una vez que se alcanza un cierto número de registros o al finalizar la lectura del archivo, se realiza una inserción masiva en la base de datos.
+		/// Método principal asíncrono que procesa un archivo de pagos en formato TXT. Lee el archivo línea por línea, valida cada registro, y si es válido, lo agrega a una tabla en memoria. Realiza inserción masiva y ejecuta la consolidación.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <param name="param"></param>
 		/// <returns></returns>
-		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
+		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultado = new ResultadoProceso { ErroresDetalle = new List<string>() };
 			DataTable tablaLote = CrearEstructuraPagos();
-			//HashSet<string> pagosProcesados = new HashSet<string>();
 
-			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT", $"Inicia lectura de archivo Folio: {param.FolioCarga}");
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPagosTXT", $"Inicia lectura de archivo Folio: {param.FolioCarga}").Wait();
 
 			using (var reader = new StreamReader(rutaArchivo, Encoding.UTF8))
 			{
@@ -38,7 +38,7 @@ namespace swCargaMasivaIngresos.Services
 				char delimitador = '|'; // Pipe por defecto
 				bool delimitadorDetectado = false;
 
-				while ((linea = reader.ReadLine()) != null)
+				while ((linea = await reader.ReadLineAsync()) != null)
 				{
 					numeroLinea++;
 					if (string.IsNullOrWhiteSpace(linea)) continue;
@@ -51,7 +51,7 @@ namespace swCargaMasivaIngresos.Services
 						else if (linea.Contains("\t")) delimitador = '\t';
 
 						delimitadorDetectado = true;
-						LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPadronTXT", $"Delimitador detectado automáticamente: '{delimitador}'").Wait();
+						LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPagosTXT", $"Delimitador detectado automáticamente: '{delimitador}'").Wait();
 					}
 
 					// Partimos la línea usando el delimitador que el sistema descubrió
@@ -64,44 +64,62 @@ namespace swCargaMasivaIngresos.Services
 						continue;
 					}
 
-					// Extraemos los componentes clave (El resto del código se queda exactamente igual)
+					// Extraemos los componentes clave
 					string claveMunicipio = col[0].Trim();
 					string tipoPredio = col[1].Trim();
 					string cuentaPredial = col[2].Trim();
+					string clasePagoStr = col[20].Trim();
 					string strBimestre = col[21].Trim();
-					string clasePago = col[20].Trim(); 
 					string impuestoDeterminado = col[22].Trim();
-					//string descuento = col[23].Trim(); 
 
-					// 3. Validaciones
+					// 3. Validaciones de Negocio Obligatorias
 					if (string.IsNullOrEmpty(cuentaPredial))
 					{
 						MarcarError(resultado, numeroLinea, "La Cuenta Predial es obligatoria.");
 						continue;
 					}
+
+					// Fallback Seguro de Municipio (Igual que en Padrón)
 					if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 					{
-						MarcarError(resultado, numeroLinea, "Clave de municipio inválida (1 a 217).");
-						continue;
+						if (param.ClaveMunicipioDestino > 0)
+						{
+							claveMun = (short)param.ClaveMunicipioDestino; // Cast explícito aplicado
+						}
+						else
+						{
+							MarcarError(resultado, numeroLinea, "Clave de municipio inválida (1 a 217).");
+							continue;
+						}
 					}
+
 					if (!byte.TryParse(tipoPredio, out byte tipoPre) || tipoPre < 1 || tipoPre > 3)
 					{
 						MarcarError(resultado, numeroLinea, "Tipo de predio inválido (1=Urbano, 2=Rústico, 3=Suburbano).");
 						continue;
 					}
-					if (!byte.TryParse(strBimestre, out byte bimestre) || bimestre > 6)
+
+					// 🚀 LÓGICA DE BANDERAS 99 (Clase de Pago y Bimestre)
+					byte clasePago = 99; // Bandera por defecto
+					byte bimestre = 99;  // Bandera por defecto
+
+					if (!string.IsNullOrWhiteSpace(clasePagoStr))
 					{
-						MarcarError(resultado, numeroLinea, "Bimestre inválido (Debe ser un número del 0 al 6).");
-						continue;
+						if (!byte.TryParse(clasePagoStr, out clasePago) || (clasePago != 1 && clasePago != 2))
+						{
+							MarcarError(resultado, numeroLinea, "Clase de Pago inválida (1=Anual, 2=Bimestral).");
+							continue;
+						}
 					}
 
-					// 4. Evitar procesar el mismo pago dos veces (¡Agregamos el Bimestre a la llave!)
-					//string llaveUnica = $"{claveMun}-{tipoPre}-{cuentaPredial}-{bimestre}";
-					//if (pagosProcesados.Contains(llaveUnica))
-					//{
-					//	continue;
-					//}
-					//pagosProcesados.Add(llaveUnica);
+					if (!string.IsNullOrWhiteSpace(strBimestre))
+					{
+						if (!byte.TryParse(strBimestre, out bimestre) || bimestre > 6)
+						{
+							MarcarError(resultado, numeroLinea, "Bimestre inválido (Debe ser un número del 0 al 6).");
+							continue;
+						}
+					}
 
 					// 5. Agregar a la tabla en memoria
 					tablaLote.Rows.Add(
@@ -110,20 +128,25 @@ namespace swCargaMasivaIngresos.Services
 						cuentaPredial,
 						param.FolioCarga,
 						bimestre.ToString(),
-						string.IsNullOrWhiteSpace(clasePago) ? DBNull.Value : (object)clasePago,
-						string.IsNullOrWhiteSpace(impuestoDeterminado) ? DBNull.Value : (object)impuestoDeterminado
+						clasePago.ToString(),
+						string.IsNullOrWhiteSpace(impuestoDeterminado) ? "0" : impuestoDeterminado
 					);
 
 					resultado.RegistrosExitosos++;
 
 					if (tablaLote.Rows.Count >= 10000)
 					{
-						InsertarLoteEnBD(tablaLote, param);
+						List<string> erroresLogicos = await InsertarLoteEnBDAsync(tablaLote, param);
+						if (erroresLogicos.Count > 0) resultado.ErroresDetalle.AddRange(erroresLogicos);
 						tablaLote.Clear();
 					}
 				}
 
-				if (tablaLote.Rows.Count > 0) InsertarLoteEnBD(tablaLote, param);
+				if (tablaLote.Rows.Count > 0)
+				{
+					List<string> erroresLogicos = await InsertarLoteEnBDAsync(tablaLote, param);
+					if (erroresLogicos.Count > 0) resultado.ErroresDetalle.AddRange(erroresLogicos);
+				}
 			}
 
 			return resultado;
@@ -132,9 +155,6 @@ namespace swCargaMasivaIngresos.Services
 		/// <summary>
 		/// Marca un error en el resultado del proceso, incrementando el contador de registros fallidos y agregando un mensaje de error detallado.
 		/// </summary>
-		/// <param name="res"></param>
-		/// <param name="linea"></param>
-		/// <param name="msg"></param>
 		private void MarcarError(ResultadoProceso res, int linea, string msg)
 		{
 			res.RegistrosFallidos++;
@@ -142,9 +162,8 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Método privado que crea la estructura de un DataTable para almacenar temporalmente los datos de pagos antes de ser insertados en la base de datos. Define las columnas necesarias y sus tipos de datos.
+		/// Método privado que crea la estructura de un DataTable para almacenar temporalmente los datos de pagos antes de ser insertados en la base de datos.
 		/// </summary>
-		/// <returns></returns>
 		private DataTable CrearEstructuraPagos()
 		{
 			var tabla = new DataTable();
@@ -153,51 +172,76 @@ namespace swCargaMasivaIngresos.Services
 			tabla.Columns.Add("CuentaPredial", typeof(string));
 			tabla.Columns.Add("FolioCarga", typeof(int));
 			tabla.Columns.Add("Bimestre", typeof(string));
-
 			tabla.Columns.Add("ClasePago", typeof(string));
 			tabla.Columns.Add("ImpuestoDeterminado", typeof(string));
 			return tabla;
 		}
 
 		/// <summary>
-		/// Método privado que realiza la inserción masiva de un lote de registros en la base de datos utilizando SqlBulkCopy. Después de insertar los registros, llama a un procedimiento almacenado para procesar los datos insertados.
+		/// Método privado asíncrono que realiza la inserción masiva de un lote de registros en Staging, ejecuta la ingesta y consolida los pagos (capturando los errores).
 		/// </summary>
-		/// <param name="lote"></param>
-		/// <param name="param"></param>
-		private void InsertarLoteEnBD(DataTable lote, ParametrosCarga param)
+		private async Task<List<string>> InsertarLoteEnBDAsync(DataTable lote, ParametrosCarga param)
 		{
-			using (SqlConnection conn = new SqlConnection(CadenaConexion))
+			var erroresConsolidacion = new List<string>();
+
+			try
 			{
-				conn.Open();
-
-				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
+				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				{
-					// OJO: Asegúrate de que la tabla 'Staging_Etiquetado' tenga estas columnas nuevas en SQL Server
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
-					bulkCopy.BatchSize = 10000;  // Vital para alta demanda
-					bulkCopy.BulkCopyTimeout = 120; // Previene timeouts por bloqueos
+					await conn.OpenAsync();
 
-					// 🚀 MAPEO EXPLÍCITO (Blindaje contra desorden de columnas en BD)
-					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
-					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
-					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
-					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
-					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
-					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
-					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
-					//bulkCopy.ColumnMappings.Add("Descuento", "Descuento"); 
+					using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
+					{
+						bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
+						bulkCopy.BatchSize = 10000;
+						bulkCopy.BulkCopyTimeout = 120;
 
-					bulkCopy.WriteToServer(lote);
-				}
+						bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
+						bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
+						bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
+						bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
+						bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
+						bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
+						bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
 
-				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
-				{
-					cmd.CommandType = CommandType.StoredProcedure;
-					cmd.CommandTimeout = 180;
-					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
-					cmd.ExecuteNonQuery();
+						await bulkCopy.WriteToServerAsync(lote);
+					}
+
+					// PASO 2: Ingesta (Merge Original)
+					using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
+					{
+						cmd.CommandType = CommandType.StoredProcedure;
+						cmd.CommandTimeout = 180;
+						cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
+						await cmd.ExecuteNonQueryAsync();
+					}
+
+					// 🚀 PASO 3: NUEVA CONSOLIDACIÓN Y CAPTURA DE ERRORES LÓGICOS
+					using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
+					{
+						cmdConsolidacion.CommandType = CommandType.StoredProcedure;
+						cmdConsolidacion.CommandTimeout = 180;
+						cmdConsolidacion.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
+
+						using (var reader = await cmdConsolidacion.ExecuteReaderAsync())
+						{
+							while (await reader.ReadAsync())
+							{
+								string cuenta = reader["CuentaPredial"].ToString();
+								string mensaje = reader["MensajeError"].ToString();
+								erroresConsolidacion.Add($"[Consolidación TXT] Cuenta {cuenta}: {mensaje}");
+							}
+						}
+					}
 				}
 			}
+			catch (SqlException ex)
+			{
+				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "SqlBulkCopy/SP Pagos TXT", ex.Message).Wait();
+				throw;
+			}
+
+			return erroresConsolidacion;
 		}
 	}
 }

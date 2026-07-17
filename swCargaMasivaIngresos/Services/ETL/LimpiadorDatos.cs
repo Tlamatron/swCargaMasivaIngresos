@@ -181,15 +181,14 @@ namespace swCargaMasivaIngresos.Services
 				else if (clasePago == "2")
 				{
 					// Si es Bimestral, la columna es obligatoria. Si no viene o viene en 0, es un error.
-					if (string.IsNullOrWhiteSpace(bimestre) || bimestre == "0")
+					if (string.IsNullOrWhiteSpace(bimestre) || bimestre == "0" || bimestre == "99")
 					{
-						erroresFila.Add("El pago es Bimestral (Clase 2) pero no se indicó el Bimestre pagado.");
+						erroresFila.Add("El pago es Bimestral pero no se indicó el Bimestre.");
 					}
 				}
 				else if (string.IsNullOrWhiteSpace(bimestre))
 				{
-					// Fallback de seguridad por si omitieron tanto clase como bimestre
-					bimestre = "0";
+					bimestre = "99";
 				}
 
 
@@ -219,7 +218,7 @@ namespace swCargaMasivaIngresos.Services
 					filaError["MotivoRechazo"] = string.Join(" | ", erroresFila);
 					resultado.TablaRechazados.Rows.Add(filaError);
 
-					resultado.DetallesErrores.Add($"Fila {numeroFila}: {string.Join(", ", erroresFila)}");
+					resultado.DetallesErrores.Add($"[Hoja: {contextoPestaña}] Fila {numeroFila}: {string.Join(", ", erroresFila)}");
 				}
 				else
 				{

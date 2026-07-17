@@ -6,14 +6,26 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
 {
+	/// <summary>
+	/// Clase encargada de procesar archivos Excel que contienen información de reducciones (descuentos).
+	/// Implementa IProcesadorFormato de manera asíncrona.
+	/// </summary>
 	public class ProcesadorReduccionesExcel : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
-		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
+		/// <summary>
+		/// Método principal asíncrono para procesar un archivo Excel de reducciones. 
+		/// Extrae los datos, aplica las reglas de validación y realiza la inserción masiva.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
+		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 
@@ -39,8 +51,6 @@ namespace swCargaMasivaIngresos.Services
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraReducciones();
 
-						//HashSet<string> reduccionesProcesadas = new HashSet<string>();
-
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
 							var fila = tablaExcel.Rows[i];
@@ -57,6 +67,7 @@ namespace swCargaMasivaIngresos.Services
 							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
+							// 🚀 FALLBACK SEGURO DE MUNICIPIO (Manejado como cadena para parseo posterior)
 							string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
 							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
 							{
@@ -71,7 +82,7 @@ namespace swCargaMasivaIngresos.Services
 							if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 							{
 								resultadoFinal.RegistrosFallidos++;
-								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: Clave de municipio inválida.");
+								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: Clave de municipio '{claveMunicipio}' inválida.");
 								continue;
 							}
 
@@ -81,16 +92,6 @@ namespace swCargaMasivaIngresos.Services
 								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: Tipo de Reducción inválido. Valor encontrado: '{tipoReduccion}'. Debe ser numérico.");
 								continue;
 							}
-
-							// 🚀 FILTRO ANTI-DUPLICADOS
-							//string llaveUnica = $"{claveMun}-{tipoPredio}-{cuentaPredial}-{tipoRed}";
-							//if (reduccionesProcesadas.Contains(llaveUnica))
-							//{
-							//	resultadoFinal.RegistrosFallidos++;
-							//	resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: La cuenta {cuentaPredial} ya tiene asignado el descuento {tipoRed} en este archivo.");
-							//	continue;
-							//}
-							//reduccionesProcesadas.Add(llaveUnica);
 
 							DataRow nuevaFila = tablaCrudos.NewRow();
 							nuevaFila["ClaveMunicipio"] = claveMun.ToString();
@@ -103,9 +104,10 @@ namespace swCargaMasivaIngresos.Services
 							tablaCrudos.Rows.Add(nuevaFila);
 						}
 
+						// 🚀 EJECUCIÓN ASÍNCRONA A BASE DE DATOS
 						if (tablaCrudos.Rows.Count > 0)
 						{
-							InsertarBulk(tablaCrudos, param);
+							await InsertarBulkAsync(tablaCrudos, param);
 							resultadoFinal.RegistrosExitosos += tablaCrudos.Rows.Count;
 						}
 					}
@@ -120,6 +122,9 @@ namespace swCargaMasivaIngresos.Services
 			return resultadoFinal;
 		}
 
+		/// <summary>
+		/// Método auxiliar para extraer valores de una fila de datos de manera segura.
+		/// </summary>
 		private string ExtraerSeguro(DataRow fila, MapeadorInteligente.MapaOficial mapa, string columna, string valorPorDefecto = "")
 		{
 			try
@@ -133,6 +138,9 @@ namespace swCargaMasivaIngresos.Services
 			}
 		}
 
+		/// <summary>
+		/// Estructura en memoria para organizar los datos extraídos de reducciones antes del volcado a la BD.
+		/// </summary>
 		private DataTable CrearEstructuraReducciones()
 		{
 			var tabla = new DataTable();
@@ -145,14 +153,22 @@ namespace swCargaMasivaIngresos.Services
 			return tabla;
 		}
 
-		private void InsertarBulk(DataTable lote, ParametrosCarga param)
+		/// <summary>
+		/// Método asíncrono que realiza la inserción masiva a Staging y ejecuta la ingesta de las reducciones.
+		/// Nota: La consolidación final de reducciones queda pendiente de reglas de negocio futuras.
+		/// </summary>
+		private async Task InsertarBulkAsync(DataTable lote, ParametrosCarga param)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
-				conn.Open();
+				await conn.OpenAsync();
+
+				// PASO 1: Inserción Masiva a Staging
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
 					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Reducciones";
+					bulkCopy.BatchSize = 10000;
+					bulkCopy.BulkCopyTimeout = 120;
 
 					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
 					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
@@ -161,16 +177,20 @@ namespace swCargaMasivaIngresos.Services
 					bulkCopy.ColumnMappings.Add("TipoReduccion", "TipoReduccion");
 					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
 
-					bulkCopy.WriteToServer(lote);
+					await bulkCopy.WriteToServerAsync(lote);
 				}
 
+				// PASO 2: Ingesta (Merge Original)
 				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeReducciones", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;
 					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
-					cmd.ExecuteNonQuery();
+
+					await cmd.ExecuteNonQueryAsync();
 				}
+
+				// PASO 3: Consolidación (Omitido intencionalmente hasta definir reglas de negocio)
 			}
 		}
 	}

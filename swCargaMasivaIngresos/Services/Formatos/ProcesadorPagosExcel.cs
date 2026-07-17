@@ -6,6 +6,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -17,12 +18,12 @@ namespace swCargaMasivaIngresos.Services
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
-		/// Método principal para procesar un archivo Excel de pagos. Lee el archivo, extrae y valida los datos, y finalmente inserta los registros válidos en la base de datos. Devuelve un objeto ResultadoProceso que contiene información sobre el número de registros exitosos y fallidos, así como detalles de errores.
+		/// Método principal asíncrono para procesar un archivo Excel de pagos. Lee el archivo, extrae y valida los datos, y finalmente inserta/consolida los registros válidos en la base de datos. Devuelve un objeto ResultadoProceso que contiene información sobre el número de registros exitosos y fallidos, así como detalles de errores.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <param name="param"></param>
 		/// <returns></returns>
-		public ResultadoProceso Procesar(string rutaArchivo, ParametrosCarga param)
+		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 
@@ -52,8 +53,6 @@ namespace swCargaMasivaIngresos.Services
 
 						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Iniciando bucle en fila {filaInicioDatos}").Wait();
 
-						//HashSet<string> pagosProcesados = new HashSet<string>();
-
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
 							var fila = tablaExcel.Rows[i];
@@ -79,10 +78,11 @@ namespace swCargaMasivaIngresos.Services
 							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
-							// 🚀 VALORES POR DEFECTO LÓGICOS
-							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "1"); // Anual por default
+							// 🚀 VALORES POR DEFECTO LÓGICOS (Banderas 99)
+							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "99");
+
 							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
-							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "0";
+							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
 
 							string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
 							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
@@ -112,18 +112,6 @@ namespace swCargaMasivaIngresos.Services
 								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
 							}
 
-							// 🚀 2. FILTRO ANTI-DUPLICADOS EN MEMORIA (Con Registro de Error)
-							//string llaveUnica = $"{claveMunicipio}-{tipoPredio}-{cuentaPredial}-{bimestre}";
-							//if (pagosProcesados.Contains(llaveUnica))
-							//{
-							//	// Registramos el fallo para que salga en el correo
-							//	resultadoFinal.RegistrosFallidos++;
-							//	resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El pago de la cuenta {cuentaPredial} para el bimestre {bimestre} está duplicado en el archivo.");
-
-							//	continue; // Ahora sí, saltamos el registro para proteger la base de datos
-							//}
-							//pagosProcesados.Add(llaveUnica);
-
 							DataRow nuevaFila = tablaCrudos.NewRow();
 							nuevaFila["ClaveMunicipio"] = claveMunicipio;
 							nuevaFila["TipoPredio"] = tipoPredio;
@@ -142,12 +130,23 @@ namespace swCargaMasivaIngresos.Services
 
 						if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 						{
-							InsertarBulk(resultadoLimpieza.TablaValidos, param);
+							// 🚀 3. EJECUCIÓN ASÍNCRONA DE LA INGESTA Y CONSOLIDACIÓN
+							List<string> erroresLogicos = await InsertarBulkAsync(resultadoLimpieza.TablaValidos, param);
+
+							// Sumamos los errores lógicos a la lista global para el correo
+							if (erroresLogicos.Any())
+							{
+								resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
+							}
 						}
 
 						resultadoFinal.RegistrosExitosos += resultadoLimpieza.TablaValidos.Rows.Count;
 						resultadoFinal.RegistrosFallidos += resultadoLimpieza.TablaRechazados.Rows.Count;
-						if (resultadoLimpieza.DetallesErrores != null) resultadoFinal.ErroresDetalle.AddRange(resultadoLimpieza.DetallesErrores);
+
+						if (resultadoLimpieza.DetallesErrores != null && resultadoLimpieza.DetallesErrores.Any())
+						{
+							resultadoFinal.ErroresDetalle.AddRange(resultadoLimpieza.DetallesErrores);
+						}
 					}
 				}
 			}
@@ -163,11 +162,6 @@ namespace swCargaMasivaIngresos.Services
 		/// <summary>
 		/// Método auxiliar para extraer valores de una fila de datos de manera segura, manejando posibles excepciones y proporcionando un valor por defecto si la extracción falla o el valor es nulo o vacío.
 		/// </summary>
-		/// <param name="fila"></param>
-		/// <param name="mapa"></param>
-		/// <param name="columna"></param>
-		/// <param name="valorPorDefecto"></param>
-		/// <returns></returns>
 		private string ExtraerSeguro(DataRow fila, MapeadorInteligente.MapaOficial mapa, string columna, string valorPorDefecto = "")
 		{
 			try
@@ -184,7 +178,6 @@ namespace swCargaMasivaIngresos.Services
 		/// <summary>
 		/// Método que crea y devuelve la estructura de un DataTable para almacenar temporalmente los datos crudos extraídos del archivo Excel antes de ser limpiados y validados. Define las columnas necesarias para el procesamiento posterior.
 		/// </summary>
-		/// <returns></returns>
 		private DataTable CrearEstructuraRaw()
 		{
 			DataTable dt = new DataTable();
@@ -195,20 +188,22 @@ namespace swCargaMasivaIngresos.Services
 			dt.Columns.Add("Bimestre", typeof(string));
 			dt.Columns.Add("ImpuestoDeterminado", typeof(string));
 			dt.Columns.Add("FechaVigencia", typeof(string));
-			dt.Columns.Add("FolioCarga", typeof(string)); // Era string, lo mantenemos como string para homogeneidad
+			dt.Columns.Add("FolioCarga", typeof(string));
 			return dt;
 		}
 
 		/// <summary>
-		/// Método que realiza la inserción masiva de registros válidos en la base de datos utilizando SqlBulkCopy. Configura las columnas a mapear y ejecuta un procedimiento almacenado para procesar los datos insertados.
+		/// Método asíncrono que realiza la inserción masiva de registros válidos en la base de datos utilizando SqlBulkCopy. Configura las columnas a mapear y ejecuta un procedimiento almacenado para procesar e ingestar los datos, y luego consolida los adeudos, capturando los errores lógicos.
 		/// </summary>
-		/// <param name="lote"></param>
-		/// <param name="param"></param>
-		private void InsertarBulk(DataTable lote, ParametrosCarga param)
+		private async Task<List<string>> InsertarBulkAsync(DataTable lote, ParametrosCarga param)
 		{
+			var erroresConsolidacion = new List<string>();
+
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
-				conn.Open();
+				await conn.OpenAsync();
+
+				// PASO 1: Inserción Masiva a Staging
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
 					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
@@ -222,20 +217,39 @@ namespace swCargaMasivaIngresos.Services
 					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
 					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
 					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
-					// La fecha no se mapea porque Etiquetados genera su propia fecha de operación en el SP, 
-					// pero la rescatamos en memoria por si el Limpiador la necesita evaluar.
 
-					bulkCopy.WriteToServer(lote);
+					await bulkCopy.WriteToServerAsync(lote);
 				}
 
+				// PASO 2: Ingesta a PadronDestino (SP Original)
 				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;
 					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
-					cmd.ExecuteNonQuery();
+					await cmd.ExecuteNonQueryAsync();
+				}
+
+				// 🚀 PASO 3: NUEVA CONSOLIDACIÓN Y CAPTURA DE ERRORES LÓGICOS
+				using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
+				{
+					cmdConsolidacion.CommandType = CommandType.StoredProcedure;
+					cmdConsolidacion.CommandTimeout = 180;
+					cmdConsolidacion.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
+
+					using (var reader = await cmdConsolidacion.ExecuteReaderAsync())
+					{
+						while (await reader.ReadAsync())
+						{
+							string cuenta = reader["CuentaPredial"].ToString();
+							string mensaje = reader["MensajeError"].ToString();
+							erroresConsolidacion.Add($"[Consolidación] Cuenta {cuenta}: {mensaje}");
+						}
+					}
 				}
 			}
+
+			return erroresConsolidacion;
 		}
 	}
 }
