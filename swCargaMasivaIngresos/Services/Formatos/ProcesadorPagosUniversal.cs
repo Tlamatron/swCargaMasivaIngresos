@@ -44,10 +44,49 @@ namespace swCargaMasivaIngresos.Services
 
 					var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(hoja.TablaCruda, out int filaInicioDatos);
 
+					//if (mapaCrudo.Count == 0)
+					//{
+					//	resultadoFinal.ErroresDetalle.Add($"No se encontraron encabezados válidos en la pestaña: {hoja.ContextoPestaña}");
+					//	continue;
+					//}
 					if (mapaCrudo.Count == 0)
 					{
-						resultadoFinal.ErroresDetalle.Add($"No se encontraron encabezados válidos en la pestaña: {hoja.ContextoPestaña}");
-						continue;
+						// 🚀 PLAN B: Detección de Archivo Crudo sin Encabezados (Layout estricto)
+						if (hoja.TablaCruda.Columns.Count >= 5 && hoja.TablaCruda.Rows.Count > 0)
+						{
+							var primeraFila = hoja.TablaCruda.Rows[0];
+							int celdasNumericas = primeraFila.ItemArray.Take(5).Count(x => decimal.TryParse(x?.ToString(), out _));
+
+							if (celdasNumericas >= 3) // Si la mayoría de las primeras 5 columnas son números
+							{
+								LogService.WriteLogAsync("WARN", param.UsuarioLogin, "ProcesadorPagosUniversal", $"[TRACE] Aplicando Plan B (Mapeo Fijo Sin Encabezados) para pestaña {hoja.ContextoPestaña}").Wait();
+
+								// Forzamos el mapa crudo con nombres oficiales para que el procesador no falle
+								mapaCrudo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+								{
+									{ "CLAVE DEL MUNICIPIO", 0 },
+									{ "TIPO DE PREDIO", 1 },
+									{ "CUENTA PREDIAL", 2 },
+									{ "CLASE DE PAGO", 3 },
+									{ "BIMESTRE", 4 }
+								};
+
+								// Si casualmente mandaron una 6ta columna con el monto, lo mapeamos
+								if (hoja.TablaCruda.Columns.Count >= 6 && decimal.TryParse(primeraFila.ItemArray[5]?.ToString(), out _))
+								{
+									mapaCrudo.Add("IMPUESTO DETERMINADO", 5);
+								}
+
+								filaInicioDatos = 0; // Obligamos a empezar la extracción desde la línea cero
+							}
+						}
+
+						// Si después del intento de rescate sigue vacío, ahora sí lo rechazamos
+						if (mapaCrudo.Count == 0)
+						{
+							resultadoFinal.ErroresDetalle.Add($"No se encontraron encabezados válidos en la pestaña: {hoja.ContextoPestaña}. El archivo no cumple con el formato.");
+							continue;
+						}
 					}
 
 					var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
