@@ -43,6 +43,41 @@ namespace swCargaMasivaIngresos.Services
 					{
 						string nombrePestaña = tablaExcel.TableName;
 
+						string pestanaUpper = nombrePestaña.ToUpper();
+
+						// 🚀 NUEVO: INFERENCIA DE CONTEXTO DESDE EL NOMBRE DE LA PESTAÑA (Caso Huehuetlán)
+						string clasePagoInferida = "99";
+						string bimestreInferido = "99";
+						string tipoPredioInferido = "";
+
+						// Inferir Clase de Pago y Bimestre
+						if (pestanaUpper.Contains("ANUAL"))
+						{
+							clasePagoInferida = "1";
+							bimestreInferido = "0"; // Los anuales suelen tener bimestre 0
+						}
+						else if (pestanaUpper.Contains("BIMESTRE"))
+						{
+							clasePagoInferida = "2";
+							// Buscar dinámicamente qué número de bimestre es (1 al 6)
+							for (int b = 1; b <= 6; b++)
+							{
+								if (pestanaUpper.Contains($"{b}BIMESTRE") || pestanaUpper.Contains($"BIMESTRE {b}") || pestanaUpper.Contains($"BIMESTRE{b}"))
+								{
+									bimestreInferido = b.ToString();
+									break;
+								}
+							}
+						}
+
+						// Inferir Tipo de Predio (Por si también omiten la columna)
+						if (pestanaUpper.Contains("URBANO") && !pestanaUpper.Contains("SUB")) tipoPredioInferido = "1";
+						else if (pestanaUpper.Contains("RUSTICO") || pestanaUpper.Contains("RÚSTICO")) tipoPredioInferido = "2";
+						else if (pestanaUpper.Contains("SUB-URBANO") || pestanaUpper.Contains("SUBURBANO") || pestanaUpper.Contains("SUB")) tipoPredioInferido = "3";
+
+
+
+
 						int filaInicioDatos;
 						var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(tablaExcel, out filaInicioDatos);
 
@@ -73,15 +108,20 @@ namespace swCargaMasivaIngresos.Services
 
 							// 🚀 HOMOLOGACIÓN SEGURA DE TIPO DE PREDIO
 							string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
+							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = tipoPredioInferido;
+
 							if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
 							else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
 							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
 							// 🚀 VALORES POR DEFECTO LÓGICOS (Banderas 99)
-							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "99");
+							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
+							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
+							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99";
 
 							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = bimestreInferido;
 							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
 
 							string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
