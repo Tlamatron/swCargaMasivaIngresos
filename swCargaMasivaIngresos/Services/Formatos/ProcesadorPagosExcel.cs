@@ -102,9 +102,48 @@ namespace swCargaMasivaIngresos.Services
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 							if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
 
-							string anioPredial = ExtraerSeguro(fila, mapaBloqueado, "Anio", "");
-							if (string.IsNullOrWhiteSpace(anioPredial)) anioPredial = DateTime.Now.Year.ToString();
-							if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+							//string anioPredial = ExtraerSeguro(fila, mapaBloqueado, "Anio", "");
+							//if (string.IsNullOrWhiteSpace(anioPredial)) anioPredial = DateTime.Now.Year.ToString();
+							//if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+
+							// 🚀 EXTRACCIÓN Y EVALUACIÓN DE RANGOS DE AÑOS
+							string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "").ToUpper().Trim();
+							bool incluyeAnioActual = false;
+							int anioActual = DateTime.Now.Year; // Ej. 2026
+
+							if (string.IsNullOrWhiteSpace(anioPredialStr))
+							{
+								incluyeAnioActual = true; // Si no trae año, asumimos que están pagando el corriente
+							}
+							else
+							{
+								// Extraemos todos los números de 4 dígitos que haya en la celda (Ej. "DEL 2022 AL 2026")
+								var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\d{4}");
+
+								if (matches.Count > 0)
+								{
+									var añosEncontrados = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
+									int anioMinimo = añosEncontrados.Min();
+									int anioMaximo = añosEncontrados.Max();
+
+									// Si el año actual cae dentro del rango de lo que están pagando
+									if (anioActual >= anioMinimo && anioActual <= anioMaximo)
+									{
+										incluyeAnioActual = true;
+									}
+								}
+							}
+
+							if (!incluyeAnioActual)
+							{
+								// Ya no lo saltamos en silencio, lo mandamos al reporte de errores del correo
+								resultadoFinal.RegistrosFallidos++;
+								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El periodo de pago '{anioPredialStr}' de la cuenta {cuentaPredial} no incluye el ejercicio fiscal en curso ({anioActual}).");
+								continue;
+							}
+
+
+
 
 							// 🚀 HOMOLOGACIÓN SEGURA DE TIPO DE PREDIO
 							string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
@@ -116,9 +155,19 @@ namespace swCargaMasivaIngresos.Services
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
 							// 🚀 VALORES POR DEFECTO LÓGICOS (Banderas 99)
+							//string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
+							//if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
+							//if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99";
+							// 🚀 VALORES POR DEFECTO LÓGICOS (Con rescate desde la pestaña y el año)
 							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
 							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
-							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99";
+
+							// Si el archivo traía la columna "Años Pagados", deducimos automáticamente que es pago Anual (1)
+							if (string.IsNullOrWhiteSpace(clasePago) && !string.IsNullOrWhiteSpace(anioPredialStr))
+							{
+								clasePago = "1";
+							}
+							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99"; // Fallback final
 
 							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
 							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = bimestreInferido;
