@@ -70,7 +70,7 @@ namespace swCargaMasivaIngresos.Services
 					string cuentaPredial = col[2].Trim();
 					string clasePagoStr = col[20].Trim();
 					string strBimestre = col[21].Trim();
-					string impuestoDeterminado = col[22].Trim();
+					string impuestoDeterminadoStr = col[22].Trim();
 
 					// 3. Validaciones de Negocio Obligatorias
 					if (string.IsNullOrEmpty(cuentaPredial))
@@ -121,6 +121,12 @@ namespace swCargaMasivaIngresos.Services
 						}
 					}
 
+					decimal impuestoDeterminadoDec = 0m;
+					if (!string.IsNullOrWhiteSpace(impuestoDeterminadoStr))
+					{
+						decimal.TryParse(impuestoDeterminadoStr, out impuestoDeterminadoDec);
+					}
+
 					// 5. Agregar a la tabla en memoria
 					tablaLote.Rows.Add(
 						claveMun.ToString(),
@@ -129,7 +135,7 @@ namespace swCargaMasivaIngresos.Services
 						param.FolioCarga,
 						bimestre.ToString(),
 						clasePago.ToString(),
-						string.IsNullOrWhiteSpace(impuestoDeterminado) ? "0" : impuestoDeterminado
+						impuestoDeterminadoDec
 					);
 
 					resultado.RegistrosExitosos++;
@@ -173,7 +179,7 @@ namespace swCargaMasivaIngresos.Services
 			tabla.Columns.Add("FolioCarga", typeof(int));
 			tabla.Columns.Add("Bimestre", typeof(string));
 			tabla.Columns.Add("ClasePago", typeof(string));
-			tabla.Columns.Add("ImpuestoDeterminado", typeof(string));
+			tabla.Columns.Add("ImpuestoDeterminado", typeof(decimal));
 			return tabla;
 		}
 
