@@ -232,12 +232,13 @@ namespace swCargaMasivaIngresos.Services
 					break;
 				}
 
-				// 🚀 2. EVALUACIÓN LÉXICA ESTRICTA (Por si hay subtítulos fusionados)
-				// Usamos FRASES EXACTAS, nunca palabras sueltas.
+				// 🚀 2. EVALUACIÓN LÉXICA ENRIQUECIDA (Segura y Coexistente)
+				// Buscamos frases estrictas O la presencia del signo "=", que denota una leyenda de encabezado (Ej. "1= Urbano")
 				if (textoUnido.Contains("TIPO DE PREDIO") || textoUnido.Contains("CLASE DE PAGO") ||
-					textoUnido.Contains("IMPUESTO DETERMINADO") || textoUnido.Contains("CLAVE DEL MUNICIPIO"))
+					textoUnido.Contains("IMPUESTO DETERMINADO") || textoUnido.Contains("CLAVE DEL MUNICIPIO") ||
+					textoUnido.Contains("=")) // <--- El salvavidas para Amixtlán que no choca con Lafragua
 				{
-					continue; // Sigue siendo un encabezado
+					continue; // Sigue siendo un encabezado, lo fusionamos
 				}
 
 				// Si no tiene muchos números, pero tampoco tiene frases de encabezado, asumimos que son datos (Ej. un cascarón con puros textos)

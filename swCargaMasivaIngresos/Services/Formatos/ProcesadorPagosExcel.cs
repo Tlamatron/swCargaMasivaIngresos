@@ -18,7 +18,7 @@ namespace swCargaMasivaIngresos.Services
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
-		/// Método principal asíncrono para procesar un archivo Excel de pagos. Lee el archivo, extrae y valida los datos, y finalmente inserta/consolida los registros válidos en la base de datos. Devuelve un objeto ResultadoProceso que contiene información sobre el número de registros exitosos y fallidos, así como detalles de errores.
+		/// Procesa un archivo Excel que contiene información de pagos, limpiando y validando los datos antes de insertarlos en la base de datos. Se infiere el contexto de cada pestaña del archivo (como clase de pago, bimestre y tipo de predio) a partir del nombre de la pestaña y los datos contenidos en ella.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <param name="param"></param>
@@ -42,10 +42,9 @@ namespace swCargaMasivaIngresos.Services
 					foreach (DataTable tablaExcel in dataSet.Tables)
 					{
 						string nombrePestaña = tablaExcel.TableName;
-
 						string pestanaUpper = nombrePestaña.ToUpper();
 
-						// 🚀 NUEVO: INFERENCIA DE CONTEXTO DESDE EL NOMBRE DE LA PESTAÑA (Caso Huehuetlán)
+						// 🚀 INFERENCIA DE CONTEXTO DESDE EL NOMBRE DE LA PESTAÑA
 						string clasePagoInferida = "99";
 						string bimestreInferido = "99";
 						string tipoPredioInferido = "";
@@ -54,12 +53,11 @@ namespace swCargaMasivaIngresos.Services
 						if (pestanaUpper.Contains("ANUAL"))
 						{
 							clasePagoInferida = "1";
-							bimestreInferido = "0"; // Los anuales suelen tener bimestre 0
+							bimestreInferido = "0";
 						}
 						else if (pestanaUpper.Contains("BIMESTRE"))
 						{
 							clasePagoInferida = "2";
-							// Buscar dinámicamente qué número de bimestre es (1 al 6)
 							for (int b = 1; b <= 6; b++)
 							{
 								if (pestanaUpper.Contains($"{b}BIMESTRE") || pestanaUpper.Contains($"BIMESTRE {b}") || pestanaUpper.Contains($"BIMESTRE{b}"))
@@ -70,13 +68,10 @@ namespace swCargaMasivaIngresos.Services
 							}
 						}
 
-						// Inferir Tipo de Predio (Por si también omiten la columna)
+						// Inferir Tipo de Predio
 						if (pestanaUpper.Contains("URBANO") && !pestanaUpper.Contains("SUB")) tipoPredioInferido = "1";
 						else if (pestanaUpper.Contains("RUSTICO") || pestanaUpper.Contains("RÚSTICO")) tipoPredioInferido = "2";
 						else if (pestanaUpper.Contains("SUB-URBANO") || pestanaUpper.Contains("SUBURBANO") || pestanaUpper.Contains("SUB")) tipoPredioInferido = "3";
-
-
-
 
 						int filaInicioDatos;
 						var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(tablaExcel, out filaInicioDatos);
@@ -97,94 +92,173 @@ namespace swCargaMasivaIngresos.Services
 
 							if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 
-							// 🚀 EXTRACCIÓN SEGURA DE LA LLAVE
+							// 🚀 1. EXTRACCIÓN SEGURA DE LA LLAVE (Cuenta Predial)
 							string cuentaPredial = ExtraerSeguro(fila, mapaBloqueado, "CuentaPredial", "");
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 							if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
 
-							//string anioPredial = ExtraerSeguro(fila, mapaBloqueado, "Anio", "");
-							//if (string.IsNullOrWhiteSpace(anioPredial)) anioPredial = DateTime.Now.Year.ToString();
-							//if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+							// 🚀 DETECCIÓN DE BASURA Y SUMATORIAS FINALES (Freno de Emergencia)
+							if (cuentaPredial.Contains("AÑO ") || cuentaPredial.Contains("REZAGO") || cuentaPredial.Contains("TOTAL") || cuentaPredial.Contains("SUMA") || cuentaPredial.Contains("CUADRO"))
+							{
+								break;
+							}
 
-							// 🚀 EXTRACCIÓN Y EVALUACIÓN DE RANGOS DE AÑOS
+							string tipoPredioHibrido = "";
+
+							// 🚀 AUTOCORRECCIÓN CUENTAS HÍBRIDAS (Ej. "U-27065")
+							if (!string.IsNullOrWhiteSpace(cuentaPredial) && cuentaPredial.Contains("-"))
+							{
+								var partes = cuentaPredial.Split('-');
+								if (partes.Length == 2)
+								{
+									string prefijo = partes[0].Trim().ToUpper();
+
+									if (prefijo == "U") tipoPredioHibrido = "1";
+									else if (prefijo == "R") tipoPredioHibrido = "2";
+									else if (prefijo == "S") tipoPredioHibrido = "3";
+
+									if (!string.IsNullOrWhiteSpace(tipoPredioHibrido))
+									{
+										cuentaPredial = partes[1].Trim();
+									}
+								}
+							}
+
+							// 🚀 2. EXTRACCIÓN Y EVALUACIÓN DE AÑOS PAGADOS
 							string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "").ToUpper().Trim();
 							bool incluyeAnioActual = false;
-							int anioActual = DateTime.Now.Year; // Ej. 2026
+							int anioActual = DateTime.Now.Year;
 
+							// Escenario A: Matriz Horizontal (Ocotepec - Años como Columnas)
 							if (string.IsNullOrWhiteSpace(anioPredialStr))
 							{
-								incluyeAnioActual = true; // Si no trae año, asumimos que están pagando el corriente
+								int colAnioActual = -1;
+								string anioActualStr = anioActual.ToString();
+
+								foreach (var kvp in mapaCrudo)
+								{
+									if (kvp.Key.StartsWith(anioActualStr))
+									{
+										colAnioActual = kvp.Value;
+										break;
+									}
+								}
+
+								if (colAnioActual != -1)
+								{
+									string valorAnioActual = fila[colAnioActual]?.ToString().Trim();
+
+									if (string.IsNullOrWhiteSpace(valorAnioActual) || valorAnioActual == "0" || valorAnioActual == "0.00")
+									{
+										// Son rezagos puros. Ignoramos la fila silenciosamente sin generar error.
+										continue;
+									}
+									else
+									{
+										// SÍ pagó el año actual. Todo en orden.
+										incluyeAnioActual = true;
+									}
+								}
+								else
+								{
+									// Si ni siquiera existe la columna del año actual en el Excel, asumimos que todo es válido 
+									// (Mecanismo de seguridad para archivos muy simples)
+									incluyeAnioActual = true;
+								}
 							}
+							// Escenario B: Rangos de Texto (Tlacuilotepec - Ej. "DEL 2022 AL 2026")
 							else
 							{
-								// Extraemos todos los números de 4 dígitos que haya en la celda (Ej. "DEL 2022 AL 2026")
 								var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\d{4}");
-
 								if (matches.Count > 0)
 								{
 									var añosEncontrados = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
 									int anioMinimo = añosEncontrados.Min();
 									int anioMaximo = añosEncontrados.Max();
 
-									// Si el año actual cae dentro del rango de lo que están pagando
 									if (anioActual >= anioMinimo && anioActual <= anioMaximo)
 									{
 										incluyeAnioActual = true;
 									}
 								}
+
+								// Si trae texto y no incluye el 2026, ESTO SÍ es un error reportable
+								if (!incluyeAnioActual && anioPredialStr != "Rezagos Anteriores")
+								{
+									resultadoFinal.RegistrosFallidos++;
+									resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El periodo de pago '{anioPredialStr}' de la cuenta {cuentaPredial} no incluye el ejercicio fiscal en curso ({anioActual}).");
+									continue;
+								}
 							}
 
-							if (!incluyeAnioActual)
-							{
-								// Ya no lo saltamos en silencio, lo mandamos al reporte de errores del correo
-								resultadoFinal.RegistrosFallidos++;
-								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El periodo de pago '{anioPredialStr}' de la cuenta {cuentaPredial} no incluye el ejercicio fiscal en curso ({anioActual}).");
-								continue;
-							}
-
-
-
-
-							// 🚀 HOMOLOGACIÓN SEGURA DE TIPO DE PREDIO
+							// 🚀 3. HOMOLOGACIÓN DE TIPO DE PREDIO
 							string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
-							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = tipoPredioInferido;
+
+							if (string.IsNullOrWhiteSpace(tipoPredio))
+							{
+								tipoPredio = !string.IsNullOrWhiteSpace(tipoPredioHibrido) ? tipoPredioHibrido : tipoPredioInferido;
+							}
 
 							if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
 							else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
 							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
-							// 🚀 VALORES POR DEFECTO LÓGICOS (Banderas 99)
-							//string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
-							//if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
-							//if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99";
-							// 🚀 VALORES POR DEFECTO LÓGICOS (Con rescate desde la pestaña y el año)
+							// 🚀 4. ASIGNACIÓN LÓGICA DE CLASE DE PAGO Y BIMESTRE
 							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
 							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
 
-							// Si el archivo traía la columna "Años Pagados", deducimos automáticamente que es pago Anual (1)
+							// Si trae texto de años, forzamos Anual (Tlacuilotepec)
 							if (string.IsNullOrWhiteSpace(clasePago) && !string.IsNullOrWhiteSpace(anioPredialStr))
 							{
 								clasePago = "1";
 							}
-							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99"; // Fallback final
 
 							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+
+							// Escaneo dinámico de columnas "B" (Ocotepec)
+							if ((string.IsNullOrWhiteSpace(clasePago) || clasePago == "99") && filaInicioDatos > 0)
+							{
+								var filaEncabezados = tablaExcel.Rows[filaInicioDatos - 1];
+								var indicesB = new System.Collections.Generic.List<int>();
+
+								for (int col = 0; col < tablaExcel.Columns.Count; col++)
+								{
+									if (filaEncabezados[col]?.ToString().Trim().ToUpper() == "B")
+									{
+										indicesB.Add(col);
+									}
+								}
+
+								if (indicesB.Count > 0)
+								{
+									foreach (int idx in indicesB)
+									{
+										string valB = fila[idx]?.ToString().Trim();
+										if (!string.IsNullOrWhiteSpace(valB) && valB != "0")
+										{
+											bimestre = valB;
+											clasePago = "2";
+											break;
+										}
+									}
+								}
+							}
+
 							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = bimestreInferido;
 							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
+							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99";
 
+							// 🚀 5. ASIGNACIONES FINALES Y EMPAQUETADO
 							string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
 							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
 							{
 								claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
 							}
 
-							// 🚀 FALLBACK LÓGICO DE FECHAS
 							string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
-
 							if (string.IsNullOrWhiteSpace(fechaVigencia))
 							{
-								// Si es un archivo de pagos sin fecha, asumimos que se pagó hoy
 								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
 							}
 							else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
@@ -197,7 +271,6 @@ namespace swCargaMasivaIngresos.Services
 							}
 							else
 							{
-								// Rescate final si el Excel trajo basura textual en la columna de fecha
 								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
 							}
 
@@ -207,7 +280,18 @@ namespace swCargaMasivaIngresos.Services
 							nuevaFila["CuentaPredial"] = cuentaPredial;
 							nuevaFila["ClasePago"] = clasePago;
 							nuevaFila["Bimestre"] = bimestre;
-							nuevaFila["ImpuestoDeterminado"] = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0");
+
+							// Parseo Decimal Seguro (Lafragua)
+							string impuestoStr = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0").Trim();
+							if (decimal.TryParse(impuestoStr, out decimal impuestoDecimal))
+							{
+								nuevaFila["ImpuestoDeterminado"] = impuestoDecimal;
+							}
+							else
+							{
+								nuevaFila["ImpuestoDeterminado"] = 0m;
+							}
+
 							nuevaFila["FechaVigencia"] = fechaVigencia;
 							nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
 							tablaCrudos.Rows.Add(nuevaFila);
@@ -219,10 +303,8 @@ namespace swCargaMasivaIngresos.Services
 
 						if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 						{
-							// 🚀 3. EJECUCIÓN ASÍNCRONA DE LA INGESTA Y CONSOLIDACIÓN
 							List<string> erroresLogicos = await InsertarBulkAsync(resultadoLimpieza.TablaValidos, param);
 
-							// Sumamos los errores lógicos a la lista global para el correo
 							if (erroresLogicos.Any())
 							{
 								resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
@@ -249,8 +331,13 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Método auxiliar para extraer valores de una fila de datos de manera segura, manejando posibles excepciones y proporcionando un valor por defecto si la extracción falla o el valor es nulo o vacío.
+		/// Extrae de manera segura un valor de una fila de datos utilizando el mapeo oficial, devolviendo un valor por defecto si ocurre algún error o si el valor extraído es nulo o vacío.
 		/// </summary>
+		/// <param name="fila"></param>
+		/// <param name="mapa"></param>
+		/// <param name="columna"></param>
+		/// <param name="valorPorDefecto"></param>
+		/// <returns></returns>
 		private string ExtraerSeguro(DataRow fila, MapeadorInteligente.MapaOficial mapa, string columna, string valorPorDefecto = "")
 		{
 			try
@@ -265,8 +352,9 @@ namespace swCargaMasivaIngresos.Services
 		}
 
 		/// <summary>
-		/// Método que crea y devuelve la estructura de un DataTable para almacenar temporalmente los datos crudos extraídos del archivo Excel antes de ser limpiados y validados. Define las columnas necesarias para el procesamiento posterior.
+		/// Crea una estructura de DataTable para almacenar temporalmente los datos crudos extraídos del archivo Excel antes de su limpieza y validación. Esta estructura incluye columnas para la clave del municipio, tipo de predio, cuenta predial, clase de pago, bimestre, impuesto determinado, fecha de vigencia y folio de carga.
 		/// </summary>
+		/// <returns></returns>
 		private DataTable CrearEstructuraRaw()
 		{
 			DataTable dt = new DataTable();
@@ -275,15 +363,18 @@ namespace swCargaMasivaIngresos.Services
 			dt.Columns.Add("CuentaPredial", typeof(string));
 			dt.Columns.Add("ClasePago", typeof(string));
 			dt.Columns.Add("Bimestre", typeof(string));
-			dt.Columns.Add("ImpuestoDeterminado", typeof(string));
+			dt.Columns.Add("ImpuestoDeterminado", typeof(decimal)); // Blindaje Lafragua
 			dt.Columns.Add("FechaVigencia", typeof(string));
 			dt.Columns.Add("FolioCarga", typeof(string));
 			return dt;
 		}
 
 		/// <summary>
-		/// Método asíncrono que realiza la inserción masiva de registros válidos en la base de datos utilizando SqlBulkCopy. Configura las columnas a mapear y ejecuta un procedimiento almacenado para procesar e ingestar los datos, y luego consolida los adeudos, capturando los errores lógicos.
+		/// Inserta de manera masiva los registros válidos en la base de datos utilizando SqlBulkCopy y luego ejecuta procedimientos almacenados para procesar y consolidar los datos. Devuelve una lista de errores encontrados durante la consolidación.
 		/// </summary>
+		/// <param name="lote"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		private async Task<List<string>> InsertarBulkAsync(DataTable lote, ParametrosCarga param)
 		{
 			var erroresConsolidacion = new List<string>();
@@ -292,7 +383,6 @@ namespace swCargaMasivaIngresos.Services
 			{
 				await conn.OpenAsync();
 
-				// PASO 1: Inserción Masiva a Staging
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
 					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
@@ -310,7 +400,6 @@ namespace swCargaMasivaIngresos.Services
 					await bulkCopy.WriteToServerAsync(lote);
 				}
 
-				// PASO 2: Ingesta a PadronDestino (SP Original)
 				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
@@ -319,7 +408,6 @@ namespace swCargaMasivaIngresos.Services
 					await cmd.ExecuteNonQueryAsync();
 				}
 
-				// 🚀 PASO 3: NUEVA CONSOLIDACIÓN Y CAPTURA DE ERRORES LÓGICOS
 				using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
 				{
 					cmdConsolidacion.CommandType = CommandType.StoredProcedure;
