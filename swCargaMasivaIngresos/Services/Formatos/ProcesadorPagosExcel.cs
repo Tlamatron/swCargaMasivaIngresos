@@ -55,7 +55,7 @@ namespace swCargaMasivaIngresos.Services
 							clasePagoInferida = "1";
 							bimestreInferido = "0";
 						}
-						else if (pestanaUpper.Contains("BIMESTRE"))
+						else if (pestanaUpper.Contains("BIMESTRE") || pestanaUpper.Contains("BIM"))
 						{
 							clasePagoInferida = "2";
 							for (int b = 1; b <= 6; b++)
@@ -78,6 +78,39 @@ namespace swCargaMasivaIngresos.Services
 
 						if (mapaCrudo.Count == 0) continue;
 
+						// 🚀 NUEVA INFERENCIA: LEER EL MEMBRETE/ENCABEZADOS DEL ARCHIVO (Idea Ayotoxco)
+						if (filaInicioDatos > 0)
+						{
+							string textoEncabezadoGlobal = "";
+							for (int r = 0; r < filaInicioDatos; r++)
+							{
+								var rowInfo = tablaExcel.Rows[r].ItemArray.Select(x => x?.ToString().Trim().ToUpper() ?? "");
+								textoEncabezadoGlobal += " " + string.Join(" ", rowInfo);
+							}
+
+							if (textoEncabezadoGlobal.Contains("BIMESTRAL") || textoEncabezadoGlobal.Contains("BIMESTRE"))
+							{
+								clasePagoInferida = "2";
+							}
+							else if (textoEncabezadoGlobal.Contains("ANUAL"))
+							{
+								clasePagoInferida = "1";
+							}
+
+							if (textoEncabezadoGlobal.Contains("SUBURBANO") || textoEncabezadoGlobal.Contains("SUB-URBANO") || textoEncabezadoGlobal.Contains("SUB URBANO"))
+							{
+								tipoPredioInferido = "3";
+							}
+							else if (textoEncabezadoGlobal.Contains("RUSTICO") || textoEncabezadoGlobal.Contains("RÚSTICO"))
+							{
+								tipoPredioInferido = "2";
+							}
+							else if (textoEncabezadoGlobal.Contains("URBANO"))
+							{
+								tipoPredioInferido = "1";
+							}
+						}
+
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraRaw();
 
@@ -97,7 +130,7 @@ namespace swCargaMasivaIngresos.Services
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 							if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
 
-							// 🚀 DETECCIÓN DE BASURA Y SUMATORIAS FINALES (Freno de Emergencia)
+							// 🚀 DETECCIÓN DE BASURA Y SUMATORIAS FINALES
 							if (cuentaPredial.Contains("AÑO ") || cuentaPredial.Contains("REZAGO") || cuentaPredial.Contains("TOTAL") || cuentaPredial.Contains("SUMA") || cuentaPredial.Contains("CUADRO"))
 							{
 								break;
@@ -129,7 +162,6 @@ namespace swCargaMasivaIngresos.Services
 							bool incluyeAnioActual = false;
 							int anioActual = DateTime.Now.Year;
 
-							// Escenario A: Matriz Horizontal (Ocotepec - Años como Columnas)
 							if (string.IsNullOrWhiteSpace(anioPredialStr))
 							{
 								int colAnioActual = -1;
@@ -150,23 +182,18 @@ namespace swCargaMasivaIngresos.Services
 
 									if (string.IsNullOrWhiteSpace(valorAnioActual) || valorAnioActual == "0" || valorAnioActual == "0.00")
 									{
-										// Son rezagos puros. Ignoramos la fila silenciosamente sin generar error.
 										continue;
 									}
 									else
 									{
-										// SÍ pagó el año actual. Todo en orden.
 										incluyeAnioActual = true;
 									}
 								}
 								else
 								{
-									// Si ni siquiera existe la columna del año actual en el Excel, asumimos que todo es válido 
-									// (Mecanismo de seguridad para archivos muy simples)
 									incluyeAnioActual = true;
 								}
 							}
-							// Escenario B: Rangos de Texto (Tlacuilotepec - Ej. "DEL 2022 AL 2026")
 							else
 							{
 								var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\d{4}");
@@ -182,7 +209,6 @@ namespace swCargaMasivaIngresos.Services
 									}
 								}
 
-								// Si trae texto y no incluye el 2026, ESTO SÍ es un error reportable
 								if (!incluyeAnioActual && anioPredialStr != "Rezagos Anteriores")
 								{
 									resultadoFinal.RegistrosFallidos++;
@@ -208,7 +234,6 @@ namespace swCargaMasivaIngresos.Services
 							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
 							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
 
-							// Si trae texto de años, forzamos Anual (Tlacuilotepec)
 							if (string.IsNullOrWhiteSpace(clasePago) && !string.IsNullOrWhiteSpace(anioPredialStr))
 							{
 								clasePago = "1";
@@ -216,7 +241,6 @@ namespace swCargaMasivaIngresos.Services
 
 							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
 
-							// Escaneo dinámico de columnas "B" (Ocotepec)
 							if ((string.IsNullOrWhiteSpace(clasePago) || clasePago == "99") && filaInicioDatos > 0)
 							{
 								var filaEncabezados = tablaExcel.Rows[filaInicioDatos - 1];
@@ -245,11 +269,7 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = bimestreInferido;
-							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
-							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99";
-
-							// 🚀 5. ASIGNACIONES FINALES Y EMPAQUETADO
+							// 🚀 5. ASIGNACIONES FINALES (Fechas y Municipio)
 							string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
 							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
 							{
@@ -274,27 +294,58 @@ namespace swCargaMasivaIngresos.Services
 								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
 							}
 
-							DataRow nuevaFila = tablaCrudos.NewRow();
-							nuevaFila["ClaveMunicipio"] = claveMunicipio;
-							nuevaFila["TipoPredio"] = tipoPredio;
-							nuevaFila["CuentaPredial"] = cuentaPredial;
-							nuevaFila["ClasePago"] = clasePago;
-							nuevaFila["Bimestre"] = bimestre;
+							// 🚀 6. GENERACIÓN DE FILAS (La magia de clonación para Ayotoxco o inserción normal)
+							var bimestresMultiples = MapeadorInteligente.ExtraerBimestresMultiplesConMonto(fila, mapaBloqueado);
 
-							// Parseo Decimal Seguro (Lafragua)
-							string impuestoStr = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0").Trim();
-							if (decimal.TryParse(impuestoStr, out decimal impuestoDecimal))
+							// Switch Inteligente: ¿Es horizontal (Ayotoxco) o vertical (Tlacuilotepec/Lafragua)?
+							if (bimestresMultiples.Count > 0 && clasePago == "2")
 							{
-								nuevaFila["ImpuestoDeterminado"] = impuestoDecimal;
+								// Layout Horizontal: Explotamos 1 fila de Excel en N filas de SQL (Una por bimestre pagado)
+								foreach (var bim in bimestresMultiples)
+								{
+									DataRow nuevaFila = tablaCrudos.NewRow();
+									nuevaFila["ClaveMunicipio"] = claveMunicipio;
+									nuevaFila["TipoPredio"] = tipoPredio;
+									nuevaFila["CuentaPredial"] = cuentaPredial;
+									nuevaFila["ClasePago"] = clasePago;
+									nuevaFila["Bimestre"] = bim.Key; // Ej. "1", "2"
+									nuevaFila["ImpuestoDeterminado"] = bim.Value; // El monto cobrado en ESE bimestre exacto
+									nuevaFila["FechaVigencia"] = fechaVigencia;
+									nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
+									tablaCrudos.Rows.Add(nuevaFila);
+								}
 							}
 							else
 							{
-								nuevaFila["ImpuestoDeterminado"] = 0m;
-							}
+								// Layout Tradicional Vertical
+								if (string.IsNullOrWhiteSpace(bimestre)) bimestre = bimestreInferido;
+								if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
+								if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99";
 
-							nuevaFila["FechaVigencia"] = fechaVigencia;
-							nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
-							tablaCrudos.Rows.Add(nuevaFila);
+								DataRow nuevaFila = tablaCrudos.NewRow();
+								nuevaFila["ClaveMunicipio"] = claveMunicipio;
+								nuevaFila["TipoPredio"] = tipoPredio;
+								nuevaFila["CuentaPredial"] = cuentaPredial;
+								nuevaFila["ClasePago"] = clasePago;
+								nuevaFila["Bimestre"] = bimestre;
+
+								// Parseo Decimal Seguro y limpieza de formato contable ($)
+								string impuestoStr = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0").Trim();
+								impuestoStr = impuestoStr.Replace("$", "").Replace(",", "").Trim();
+
+								if (decimal.TryParse(impuestoStr, out decimal impuestoDecimal))
+								{
+									nuevaFila["ImpuestoDeterminado"] = impuestoDecimal;
+								}
+								else
+								{
+									nuevaFila["ImpuestoDeterminado"] = 0m;
+								}
+
+								nuevaFila["FechaVigencia"] = fechaVigencia;
+								nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
+								tablaCrudos.Rows.Add(nuevaFila);
+							}
 						}
 
 						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Bucle finalizado. Filas crudas recolectadas: {tablaCrudos.Rows.Count}").Wait();

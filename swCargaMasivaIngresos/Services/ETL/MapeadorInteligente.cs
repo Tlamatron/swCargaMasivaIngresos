@@ -423,16 +423,32 @@ namespace swCargaMasivaIngresos.Services
 			Asignar("TipoReduccion", "TIPO DE REDUCCION", "TIPO DE REDUCCIÓN", "REDUCCION", "REDUCCIÓN", "DESCUENTO", "REDUCCI");
 
 			// Bimestres Sueltos
+			//string[] columnasBimestrales = { "1", "2", "3", "4", "5", "6", "B1", "B2", "B3", "B4", "B5", "B6" };
+			//foreach (var col in columnasBimestrales)
+			//{
+			//	if (mapaCrudo.ContainsKey(col) && !columnasUsadas.Contains(mapaCrudo[col]))
+			//	{
+			//		oficial.BimestresSueltos[col] = mapaCrudo[col];
+			//		columnasUsadas.Add(mapaCrudo[col]);
+			//	}
+			//}
 			string[] columnasBimestrales = { "1", "2", "3", "4", "5", "6", "B1", "B2", "B3", "B4", "B5", "B6" };
 			foreach (var col in columnasBimestrales)
 			{
-				if (mapaCrudo.ContainsKey(col) && !columnasUsadas.Contains(mapaCrudo[col]))
+				foreach (var kvp in mapaCrudo)
 				{
-					oficial.BimestresSueltos[col] = mapaCrudo[col];
-					columnasUsadas.Add(mapaCrudo[col]);
+					if (!columnasUsadas.Contains(kvp.Value))
+					{
+						// Match exacto ("1") o sufijo de matriz ("BIMESTRES 1", "BIMESTRE 2")
+						if (kvp.Key == col || kvp.Key.EndsWith("BIMESTRES " + col) || kvp.Key.EndsWith("BIMESTRE " + col))
+						{
+							oficial.BimestresSueltos[col] = kvp.Value;
+							columnasUsadas.Add(kvp.Value);
+							break;
+						}
+					}
 				}
 			}
-
 			return oficial;
 		}
 
@@ -492,5 +508,30 @@ namespace swCargaMasivaIngresos.Services
 		/// <param name="indiceInicioDatos"></param>
 		/// <returns></returns>
 		public static DataTable EstandarizarTabla(DataTable tablaCruda, Dictionary<string, int> mapaCrudo, int indiceInicioDatos = 0) { return new DataTable(); /* Omitido por brevedad, no lo borres */ }
+
+
+		/// <summary>
+		/// Extrae todos los bimestres pagados en un layout horizontal (estilo Ayotoxco) junto con el monto pagado en cada uno.
+		/// </summary>
+		public static Dictionary<string, decimal> ExtraerBimestresMultiplesConMonto(DataRow fila, MapaOficial mapa)
+		{
+			var resultado = new Dictionary<string, decimal>();
+			foreach (var kvp in mapa.BimestresSueltos)
+			{
+				string valor = fila[kvp.Value]?.ToString().Trim().ToUpper() ?? "";
+
+				// Ayotoxco usa guiones "-" para celdas vacías contables. Los ignoramos.
+				if (!string.IsNullOrWhiteSpace(valor) && valor != "0" && valor != "0.00" && valor != "-")
+				{
+					// Limpiamos formato moneda
+					string valorLimpio = valor.Replace("$", "").Replace(",", "").Trim();
+					if (decimal.TryParse(valorLimpio, out decimal monto))
+					{
+						resultado[kvp.Key.Replace("B", "")] = monto;
+					}
+				}
+			}
+			return resultado;
+		}
 	}
 }
