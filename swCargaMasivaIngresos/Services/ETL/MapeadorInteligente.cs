@@ -109,20 +109,38 @@ namespace swCargaMasivaIngresos.Services
 				{
 					puntajeFila -= 100; // Descalificación inmediata
 				}
-			
-				// 📊 CRITERIO 5: Validación del Ecosistema Inferior (Vecino inmediato)
-				if (i + 1 < tabla.Rows.Count)
-				{
-					var celdasAbajo = tabla.Rows[i + 1].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
-					int numerosAbajo = celdasAbajo.Count(c => decimal.TryParse(c, out _));
 
-					// Si la fila de abajo está compuesta en su mayoría por números (>50%), 
-					// incrementa drásticamente la probabilidad de que la fila actual sea el encabezado contenedor.
-					if (celdasAbajo.Count > 0 && numerosAbajo > (celdasAbajo.Count(x => !string.IsNullOrWhiteSpace(x)) / 2.0))
+				// 📊 CRITERIO 5: Validación del Ecosistema Inferior (Escaneo profundo para encabezados agrupados)
+				bool encontroDatosAbajo = false;
+				for (int step = 1; step <= 2; step++) // Buscamos en la fila inmediatamente abajo, o en la siguiente
+				{
+					if (i + step < tabla.Rows.Count)
 					{
-						puntajeFila += 15;
+						var celdasAbajo = tabla.Rows[i + step].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
+						int celdasLlenasAbajo = celdasAbajo.Count(x => !string.IsNullOrWhiteSpace(x));
+						int numerosAbajo = celdasAbajo.Count(c => decimal.TryParse(c, out _));
+
+						// Si la fila de abajo está compuesta en su mayoría por números (>50%), es el inicio de datos.
+						if (celdasLlenasAbajo > 0 && numerosAbajo > (celdasLlenasAbajo / 2.0))
+						{
+							puntajeFila += 15;
+							encontroDatosAbajo = true;
+							break; // Si ya encontró los datos, otorgamos los puntos y dejamos de buscar
+						}
 					}
 				}
+				//if (i + 1 < tabla.Rows.Count)
+				//{
+				//	var celdasAbajo = tabla.Rows[i + 1].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
+				//	int numerosAbajo = celdasAbajo.Count(c => decimal.TryParse(c, out _));
+
+				//	// Si la fila de abajo está compuesta en su mayoría por números (>50%), 
+				//	// incrementa drásticamente la probabilidad de que la fila actual sea el encabezado contenedor.
+				//	if (celdasAbajo.Count > 0 && numerosAbajo > (celdasAbajo.Count(x => !string.IsNullOrWhiteSpace(x)) / 2.0))
+				//	{
+				//		puntajeFila += 15;
+				//	}
+				//}
 
 				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} | Llenas: {celdasLlenas} | Números Aquí: {numerosAqui} | Puntaje: {puntajeFila} | Texto: {textoFila}").Wait();
 
@@ -348,6 +366,26 @@ namespace swCargaMasivaIngresos.Services
 			var oficial = new MapaOficial();
 			var columnasUsadas = new HashSet<int>();
 
+			// 🚀 0. PRIMERO RESCATAMOS LOS BIMESTRES SUELTOS (Evita que el consolidado se robe el Bimestre 1)
+			string[] columnasBimestrales = { "1", "2", "3", "4", "5", "6", "B1", "B2", "B3", "B4", "B5", "B6" };
+			foreach (var col in columnasBimestrales)
+			{
+				foreach (var kvp in mapaCrudo)
+				{
+					if (!columnasUsadas.Contains(kvp.Value))
+					{
+						// Match exacto ("1") o sufijo de celdas agrupadas ("BIMESTRES 1", "BIM 2")
+						if (kvp.Key == col || kvp.Key.EndsWith("BIMESTRES " + col) || kvp.Key.EndsWith("BIMESTRE " + col) || kvp.Key.EndsWith("BIM " + col))
+						{
+							oficial.BimestresSueltos[col] = kvp.Value;
+							columnasUsadas.Add(kvp.Value);
+							break;
+						}
+					}
+				}
+			}
+
+
 			void Asignar(string nombreOficial, params string[] sinonimos)
 			{
 				foreach (var sin in sinonimos)
@@ -436,23 +474,7 @@ namespace swCargaMasivaIngresos.Services
 			//		columnasUsadas.Add(mapaCrudo[col]);
 			//	}
 			//}
-			string[] columnasBimestrales = { "1", "2", "3", "4", "5", "6", "B1", "B2", "B3", "B4", "B5", "B6" };
-			foreach (var col in columnasBimestrales)
-			{
-				foreach (var kvp in mapaCrudo)
-				{
-					if (!columnasUsadas.Contains(kvp.Value))
-					{
-						// Match exacto ("1") o sufijo de matriz ("BIMESTRES 1", "BIMESTRE 2")
-						if (kvp.Key == col || kvp.Key.EndsWith("BIMESTRES " + col) || kvp.Key.EndsWith("BIMESTRE " + col))
-						{
-							oficial.BimestresSueltos[col] = kvp.Value;
-							columnasUsadas.Add(kvp.Value);
-							break;
-						}
-					}
-				}
-			}
+			
 			return oficial;
 		}
 
