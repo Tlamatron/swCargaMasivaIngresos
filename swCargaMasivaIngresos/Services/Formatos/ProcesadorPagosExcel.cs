@@ -148,6 +148,8 @@ namespace swCargaMasivaIngresos.Services
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 
 							bool esPagoAnualPorTexto = false;
+							bool esBimestralPorTexto = false;
+							string bimestrePorTexto = "";
 							string cuentaUpper = cuentaPredial.ToUpper();
 
 							// Limpiar "BIMESTRAL"
@@ -157,14 +159,27 @@ namespace swCargaMasivaIngresos.Services
 								cuentaUpper = cuentaPredial.ToUpper();
 							}
 
-							// 🛠️ EXPLICACIÓN: Limpiar textos como "PAGO 2026" o "DEL 2022 AL 2026" usando Regex.
-							// Esto limpia la cuenta para la base de datos y levanta la bandera de pago Anual.
+							// 🛠️ FIX ZIHUATEUTLA (Febrero): Detectar y extraer "BIMESTRE 1", "BIM 2", etc.
+							var regexBimestreExacto = new System.Text.RegularExpressions.Regex(@"(?i)(?:BIMESTRE|BIM)\s*([1-6])");
+							var matchBimestre = regexBimestreExacto.Match(cuentaUpper);
+							if (matchBimestre.Success)
+							{
+								esBimestralPorTexto = true;
+								bimestrePorTexto = matchBimestre.Groups[1].Value; // Extrae mágicamente el número (ej. "1")
+
+								// Borramos ese texto de la cuenta para dejarla limpia (ej. "4353")
+								cuentaPredial = regexBimestreExacto.Replace(cuentaUpper, "").Trim();
+								cuentaPredial = cuentaPredial.Replace("()", "").Replace("[]", "").Replace("-", "").Trim();
+								cuentaUpper = cuentaPredial.ToUpper();
+							}
+
+							// 🛠️ Limpiar textos como "PAGO 2026" o "DEL 2022 AL 2026" usando Regex.
 							var regexPagoAnual = new System.Text.RegularExpressions.Regex(@"(?i)(PAGO\s*DEL\s*\d{4}\s*AL\s*\d{4}|PAGO\s*\d{4})");
 							if (regexPagoAnual.IsMatch(cuentaUpper))
 							{
 								esPagoAnualPorTexto = true;
 								cuentaPredial = regexPagoAnual.Replace(cuentaUpper, "").Trim();
-								cuentaPredial = cuentaPredial.Replace("()", "").Replace("[]", "").Trim(); // Limpiar paréntesis vacíos si quedaron
+								cuentaPredial = cuentaPredial.Replace("()", "").Replace("[]", "").Trim();
 							}
 
 							if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
@@ -248,7 +263,7 @@ namespace swCargaMasivaIngresos.Services
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
 							// =========================================================================
-							// 🚀 4. CASCADA LÓGICA DE INFERENCIA DE PAGO (Con "Smart Default")
+							// 🚀 4. CASCADA LÓGICA DE INFERENCIA DE PAGO 
 							// =========================================================================
 							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
 							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
@@ -281,9 +296,15 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-							// 💡 INFERENCIA B: Inferencia de contexto a nivel de renglón 
+							// 💡 INFERENCIA B: Inferencia de contexto a nivel de renglón
 							string textoFilaCompleta = string.Join(" ", fila.ItemArray).ToUpper();
-							if (textoFilaCompleta.Contains("BIMESTRAL") || textoFilaCompleta.Contains("BIMESTRE"))
+
+							if (esBimestralPorTexto)
+							{
+								clasePago = "2";
+								bimestre = bimestrePorTexto;
+							}
+							else if (textoFilaCompleta.Contains("BIMESTRAL") || textoFilaCompleta.Contains("BIMESTRE"))
 							{
 								clasePago = "2";
 								if (textoFilaCompleta.Contains("6 BIMESTRES") || textoFilaCompleta.Contains("SEIS BIMESTRES"))
@@ -293,26 +314,34 @@ namespace swCargaMasivaIngresos.Services
 							}
 							else if (esPagoAnualPorTexto || textoFilaCompleta.Contains("PAGO 20") || textoFilaCompleta.Contains("AL 20"))
 							{
-								clasePago = "1"; // Fue deducido por texto escondido como "PAGO 2026"
+								clasePago = "1";
 								bimestre = "0";
 							}
 
-							// 💡 INFERENCIA C: Auto-Corrección lógica. Si halló bimestre, obliga a que la clase sea 2.
-							if ((clasePago == "99" || string.IsNullOrWhiteSpace(clasePago)) &&
-								!string.IsNullOrWhiteSpace(bimestre) && bimestre != "0" && bimestre != "99")
-							{
-								clasePago = "2";
-							}
-
-							// 💡 INFERENCIA D: El Default Inteligente (Tu nueva regla)
+							// 💡 INFERENCIA C: Auto-Corrección lógica por Bimestre explícito.
 							if (clasePago == "99" || string.IsNullOrWhiteSpace(clasePago))
 							{
-								// 1. Si el renglón tiene un año válido asignado, asumimos Anual
+								// Si halló un bimestre del 1 al 6, obliga a que la clase sea 2.
+								if (!string.IsNullOrWhiteSpace(bimestre) && bimestre != "0" && bimestre != "99")
+								{
+									clasePago = "2";
+								}
+								// 🛠️ EXPLICACIÓN NUEVA: Si halló un "0" en la columna bimestre, obliga a que sea Anual.
+								else if (bimestre == "0")
+								{
+									clasePago = "1";
+								}
+							}
+
+							// 💡 INFERENCIA D: El Default Inteligente
+							if (clasePago == "99" || string.IsNullOrWhiteSpace(clasePago))
+							{
+								// 1. Si el renglón tiene un año válido asignado explícitamente
 								if ((!string.IsNullOrWhiteSpace(anioPredialStr) && anioPredialStr != "-") || incluyeAnioActual)
 								{
 									clasePago = "1";
 								}
-								// 2. Si vimos referencias bimestrales en el archivo, asumimos que los que no dicen nada son Anuales
+								// 2. Si vimos referencias bimestrales en el archivo
 								else if (archivoTienePagosBimestrales)
 								{
 									clasePago = "1";
