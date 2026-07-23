@@ -57,20 +57,37 @@ namespace swCargaMasivaIngresos.Services
 					// Partimos la línea usando el delimitador que el sistema descubrió
 					string[] col = linea.Split(delimitador);
 
-					// 1. Validar Layout estricto de 24 columnas
-					if (col.Length != 24)
+					// 1. Validar Layout (Permitir el estricto de 24 columnas o el reducido de 5/6 columnas)
+					if (col.Length != 24 && col.Length < 5)
 					{
-						MarcarError(resultado, numeroLinea, $"Columnas incorrectas. Se esperaban 24, llegaron {col.Length} usando el separador '{delimitador}'.");
+						MarcarError(resultado, numeroLinea, $"Columnas incorrectas. Se esperaban 24 o al menos 5, llegaron {col.Length} usando el separador '{delimitador}'.");
 						continue;
 					}
 
 					// Extraemos los componentes clave
+					// 2. Extraer componentes clave de forma dinámica
 					string claveMunicipio = col[0].Trim();
 					string tipoPredio = col[1].Trim();
 					string cuentaPredial = col[2].Trim();
-					string clasePagoStr = col[20].Trim();
-					string strBimestre = col[21].Trim();
-					string impuestoDeterminadoStr = col[22].Trim();
+
+					string clasePagoStr = "";
+					string strBimestre = "";
+					string impuestoDeterminadoStr = "0";
+
+					// Si es el layout completo de 24 columnas
+					if (col.Length == 24)
+					{
+						clasePagoStr = col[20].Trim();
+						strBimestre = col[21].Trim();
+						impuestoDeterminadoStr = col[22].Trim();
+					}
+					// Si es el layout reducido sin encabezados (Mínimo 5 columnas)
+					else if (col.Length >= 5 && col.Length < 24)
+					{
+						clasePagoStr = col[3].Trim();
+						strBimestre = col[4].Trim();
+						if (col.Length >= 6) impuestoDeterminadoStr = col[5].Trim(); // Por si incluyen el monto al final
+					}
 
 					// 3. Validaciones de Negocio Obligatorias
 					if (string.IsNullOrEmpty(cuentaPredial))

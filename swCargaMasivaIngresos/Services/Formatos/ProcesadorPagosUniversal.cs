@@ -237,6 +237,7 @@ namespace swCargaMasivaIngresos.Services
 					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
 					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
 					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
+					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
 
 					await bulkCopy.WriteToServerAsync(lote);
 				}
