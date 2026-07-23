@@ -147,9 +147,17 @@ namespace swCargaMasivaIngresos.Services
 					// Validamos si es el sub-encabezado de bimestres (1, 2, 3...) y lo perdonamos
 					bool esFilaBimestres = numeros.All(n => n == "1" || n == "2" || n == "3" || n == "4" || n == "5" || n == "6" || n == "1.0" || n == "2.0" || n == "3.0");
 
-					if (esFilaBimestres)
+					bool esFilaAnios = numeros.All(n => {
+						if (int.TryParse(n.Replace(".0", "").Trim(), out int num))
+						{
+							return num >= 1990 && num <= 2050; // Si todos los números son años, es un título
+						}
+						return false;
+					});
+
+					if (esFilaBimestres || esFilaAnios)
 					{
-						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} salvada. Es el sub-encabezado Bimestral.").Wait();
+						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} salvada. Es el sub-encabezado Bimestral/Anual.").Wait();
 						continue;
 					}
 
@@ -589,8 +597,8 @@ namespace swCargaMasivaIngresos.Services
 				$"{anioActual}BRUTO",
 				$"TOTAL{anioActual}",        // Ej: "TOTAL 2026"
 				$"IMPUESTO{anioActual}",     // Ej: "IMPUESTO 2026"
-
-				// 🎯 2. FRANCOTIRADORES SEMÁNTICOS (Palabras contundentes)
+				anioActual.ToString(),       // 🛠️ FIX ZIHUATEUTLA: El puro año "2026" es el monto a cobrar
+											 // 🎯 2. FRANCOTIRADORES SEMÁNTICOS (Palabras contundentes)
 				"ACTUAL",                    // Ej: "IMPUESTO ACTUAL", "COBRO ACTUAL"
 				"NETO",                      // Ej: "IMPORTE COBRADO (NETO)"
 				"IMPUESTODETERMINADO",       // Nombre oficial perfecto

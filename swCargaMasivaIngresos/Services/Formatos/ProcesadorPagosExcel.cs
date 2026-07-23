@@ -308,7 +308,7 @@ namespace swCargaMasivaIngresos.Services
 							if (clasePago == "99" || string.IsNullOrWhiteSpace(clasePago))
 							{
 								// 1. Si el renglón tiene un año válido asignado, asumimos Anual
-								if (!string.IsNullOrWhiteSpace(anioPredialStr) && anioPredialStr != "-")
+								if ((!string.IsNullOrWhiteSpace(anioPredialStr) && anioPredialStr != "-") || incluyeAnioActual)
 								{
 									clasePago = "1";
 								}
