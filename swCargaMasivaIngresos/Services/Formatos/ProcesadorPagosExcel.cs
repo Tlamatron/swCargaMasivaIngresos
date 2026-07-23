@@ -76,7 +76,7 @@ namespace swCargaMasivaIngresos.Services
 
 						if (mapaCrudo.Count == 0) continue;
 
-						// 🚀 NUEVA INFERENCIA: LEER EL MEMBRETE/ENCABEZADOS DEL ARCHIVO (Idea Ayotoxco)
+						// 🚀 NUEVA INFERENCIA: LEER EL MEMBRETE/ENCABEZADOS DEL ARCHIVO
 						if (filaInicioDatos > 0)
 						{
 							string textoEncabezadoGlobal = "";
@@ -86,15 +86,20 @@ namespace swCargaMasivaIngresos.Services
 								textoEncabezadoGlobal += " " + string.Join(" ", rowInfo);
 							}
 
-							if (textoEncabezadoGlobal.Contains("BIMESTRAL") || textoEncabezadoGlobal.Contains("BIMESTRE"))
+							// 🛠️ FIX: Solo deducir del membrete si la pestaña no nos dio la respuesta (99)
+							if (clasePagoInferida == "99")
 							{
-								clasePagoInferida = "2";
-							}
-							else if (textoEncabezadoGlobal.Contains("ANUAL"))
-							{
-								clasePagoInferida = "1";
+								if (textoEncabezadoGlobal.Contains("BIMESTRAL") || textoEncabezadoGlobal.Contains("BIMESTRE") || textoEncabezadoGlobal.Contains("BIM"))
+								{
+									clasePagoInferida = "2";
+								}
+								else if (textoEncabezadoGlobal.Contains("ANUAL"))
+								{
+									clasePagoInferida = "1";
+								}
 							}
 
+							// (La inferencia del tipo de predio se queda igual)
 							if (textoEncabezadoGlobal.Contains("SUBURBANO") || textoEncabezadoGlobal.Contains("SUB-URBANO") || textoEncabezadoGlobal.Contains("SUB URBANO"))
 							{
 								tipoPredioInferido = "3";
@@ -118,8 +123,9 @@ namespace swCargaMasivaIngresos.Services
 						{
 							var fila = tablaExcel.Rows[i];
 
-							string textoInicioFila = string.Join(" ", fila.ItemArray.Take(3).Select(x => x?.ToString().ToUpper() ?? ""));
-							if (textoInicioFila.Contains("TOTAL")) break;
+							// 🛠️ FIX: Ampliamos el rango de visión a 6 columnas para el Límite de Fin de Tabla
+							string textoInicioFila = string.Join(" ", fila.ItemArray.Take(6).Select(x => x?.ToString().ToUpper() ?? ""));
+							if (textoInicioFila.Contains("TOTAL") || textoInicioFila.Contains("SUMA") || textoInicioFila.Contains("CUADRO")) break;
 
 							if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 

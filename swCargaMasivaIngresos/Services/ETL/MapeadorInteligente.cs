@@ -26,13 +26,180 @@ namespace swCargaMasivaIngresos.Services
 			public Dictionary<string, int> BimestresSueltos { get; set; } = new Dictionary<string, int>();
 		}
 
+
+		/// <summary>
+		/// Extrae un mapeo de columnas basado en encabezados encontrados en un DataTable, utilizando un enfoque de extracción vertical por regiones. 
+		/// Utiliza el concepto de "Caja Delimitadora" (Bounding Box) para encontrar el Límite Superior (Zona A) y el Límite Inferior (Zona B).
+		/// </summary>
+		public static Dictionary<string, int> ObtenerMapaPorRegiones(DataTable tabla, out int filaInicioDatos)
+		{
+			filaInicioDatos = -1;
+			int filaEncabezado = -1;
+
+			// 🚀 HACK: Disfrazamos el Trace de WARN para que LogService lo imprima sí o sí
+			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] === ESCANEANDO PESTAÑA: {tabla.TableName} | Filas Totales: {tabla.Rows.Count} ===").Wait();
+
+			// ==========================================================================================
+			// 1. ZONA A: Búsqueda Heurística por Ponderación Estructural (El Límite Superior)
+			// Buscamos dónde empieza realmente la tabla de datos, ignorando membretes genéricos.
+			// ==========================================================================================
+			int mejorPuntaje = -1;
+			int filaCandidata = -1;
+
+			for (int i = 0; i < Math.Min(50, tabla.Rows.Count); i++)
+			{
+				var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
+				int celdasLlenas = celdas.Count(x => !string.IsNullOrWhiteSpace(x));
+
+				// Si la fila está vacía, no tiene caso analizarla
+				if (celdasLlenas == 0) continue;
+
+				string textoFila = string.Join(" ", celdas).ToUpper();
+				int puntajeFila = 0;
+
+				// 📊 CRITERIO 1: Densidad Horizontal
+				puntajeFila += celdasLlenas;
+
+				// 📊 CRITERIO 2: Palabras Clave Core (Identificadores únicos de negocio)
+				if (textoFila.Contains("CUENTA") || textoFila.Contains("CTA")) puntajeFila += 10;
+				if (textoFila.Contains("PREDIO") || textoFila.Contains("PREDIAL")) puntajeFila += 10;
+				if (textoFila.Contains("BIMESTRE")) puntajeFila += 10;
+				if (textoFila.Contains("CLASE")) puntajeFila += 10;
+				if (textoFila.Contains("IMPUESTO") || textoFila.Contains("REDUCCION") || textoFila.Contains("IMPORTE")) puntajeFila += 10;
+
+				// 📊 CRITERIO 3: Palabras Clave Suaves
+				if (textoFila.Contains("MUNICIPIO")) puntajeFila += 3;
+				if (textoFila.Contains("FECHA")) puntajeFila += 3;
+				if (textoFila.Contains("NOMBRE")) puntajeFila += 3;
+
+				// 📊 CRITERIO 4: FILTRO DEFENSIVO (Discriminador de Datos vs. Texto)
+				int numerosAqui = celdas.Count(c => decimal.TryParse(c, out _));
+				if (celdasLlenas > 0 && numerosAqui > (celdasLlenas / 2.0))
+				{
+					puntajeFila -= 100; // Descalificación inmediata, estos son datos, no un título.
+				}
+
+				// 📊 CRITERIO 5: Escaneo Profundo para encabezados agrupados (Ecosistema Inferior)
+				bool encontroDatosAbajo = false;
+				for (int step = 1; step <= 2; step++) // Buscamos hasta 2 filas abajo para salvar las celdas fusionadas
+				{
+					if (i + step < tabla.Rows.Count)
+					{
+						var celdasAbajo = tabla.Rows[i + step].ItemArray.Select(x => x?.ToString().Trim() ?? "").ToList();
+						int celdasLlenasAbajo = celdasAbajo.Count(x => !string.IsNullOrWhiteSpace(x));
+						int numerosAbajo = celdasAbajo.Count(c => decimal.TryParse(c, out _));
+
+						// Si abajo hay puros números, esta fila actual es el título contenedor.
+						if (celdasLlenasAbajo > 0 && numerosAbajo > (celdasLlenasAbajo / 2.0))
+						{
+							puntajeFila += 15;
+							encontroDatosAbajo = true;
+							break;
+						}
+					}
+				}
+
+				// 🏆 EVALUACIÓN DEL GANADOR
+				if (puntajeFila > mejorPuntaje && puntajeFila >= 15)
+				{
+					mejorPuntaje = puntajeFila;
+					filaCandidata = i;
+				}
+			}
+
+			// DETERMINACIÓN FINAL DEL LÍMITE SUPERIOR
+			if (filaCandidata != -1)
+			{
+				filaEncabezado = filaCandidata;
+				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ANCLADO! Ganador indiscutible Fila {filaEncabezado} con {mejorPuntaje} puntos.").Wait();
+			}
+			else
+			{
+				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", "[TRACE] -> FRACASO: Ninguna fila superó el umbral. Abortando pestaña.").Wait();
+				return new Dictionary<string, int>();
+			}
+
+			// ==========================================================================================
+			// 2. ZONA B: Encontrar inicio de datos (La "Caja Delimitadora" / Límite Inferior)
+			// Aquí el código aprende a distinguir cuándo terminaron los títulos múltiples y empezó el padrón.
+			// ==========================================================================================
+			filaInicioDatos = filaEncabezado + 1;
+			for (int i = filaEncabezado + 1; i < Math.Min(filaEncabezado + 10, tabla.Rows.Count); i++)
+			{
+				var celdas = tabla.Rows[i].ItemArray.Select(x => x?.ToString().Trim().ToUpper() ?? "").ToList();
+				string textoUnido = string.Join("", celdas);
+
+				if (string.IsNullOrWhiteSpace(textoUnido)) continue;
+
+				// 🚀 1. REGLA LÉXICA: Palabras que obligan a empujar el límite hacia abajo (Siguen siendo títulos)
+				if (textoUnido.Contains("TIPO DE PREDIO") || textoUnido.Contains("BIMESTRE") ||
+					textoUnido.Contains("CLASE DE PAGO") || textoUnido.Contains("CLAVE DEL MUNICIPIO") ||
+					textoUnido.Contains("=") || textoUnido.Contains("TOTAL") || textoUnido.Contains("SALDO"))
+				{
+					continue;
+				}
+
+				// 🚀 2. REGLA NUMÉRICA: Discriminador inteligente de números de título vs. números de dinero
+				var numeros = celdas.Where(c => decimal.TryParse(c.Replace("$", "").Replace(",", ""), out _)).ToList();
+
+				if (numeros.Count >= 3)
+				{
+					// Validamos si es el sub-encabezado de bimestres (1, 2, 3...) y lo perdonamos
+					bool esFilaBimestres = numeros.All(n => n == "1" || n == "2" || n == "3" || n == "4" || n == "5" || n == "6" || n == "1.0" || n == "2.0" || n == "3.0");
+
+					if (esFilaBimestres)
+					{
+						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Fila {i} salvada. Es el sub-encabezado Bimestral.").Wait();
+						continue;
+					}
+
+					// Si son números mezclados (ej. montos, cuentas largas), ES LA TABLA.
+					filaInicioDatos = i;
+					LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> Inicio de datos fijado en Fila {i}").Wait();
+					break;
+				}
+
+				// 🚀 3. REGLA DE SEGURIDAD EXTREMA: El Símbolo de Dinero
+				if (celdas.Any(c => c.Contains("$")))
+				{
+					filaInicioDatos = i;
+					LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> Inicio de datos fijado en Fila {i} (Símbolo $ detectado)").Wait();
+					break;
+				}
+			}
+
+			// ==========================================================================================
+			// 3. ZONA C: Extracción Vertical (Fusión de la Caja)
+			// Ya que sabemos dónde empieza (Zona A) y dónde termina (Zona B), fusionamos los textos de arriba hacia abajo.
+			// ==========================================================================================
+			var mapaCrudo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+			for (int c = 0; c < tabla.Columns.Count; c++)
+			{
+				List<string> partes = new List<string>();
+				for (int r = filaEncabezado; r < filaInicioDatos; r++)
+				{
+					string val = tabla.Rows[r][c]?.ToString().Trim().ToUpper();
+					if (!string.IsNullOrWhiteSpace(val)) partes.Add(val);
+				}
+
+				if (partes.Count > 0)
+				{
+					string colName = string.Join(" ", partes).Replace("\r", " ").Replace("\n", " ").Replace("  ", " ");
+					if (!mapaCrudo.ContainsKey(colName)) mapaCrudo[colName] = c;
+				}
+			}
+
+			LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Mapa extraído: {string.Join(", ", mapaCrudo.Keys)}").Wait();
+			return mapaCrudo;
+		}
+
 		/// <summary>
 		/// Extrae un mapeo de columnas basado en encabezados encontrados en un DataTable, utilizando un enfoque de extracción vertical por regiones. Este método identifica la fila de encabezado y la fila de inicio de datos, y luego construye un diccionario que asocia los nombres de columna con sus índices correspondientes.
 		/// </summary>
 		/// <param name="tabla"></param>
 		/// <param name="filaInicioDatos"></param>
 		/// <returns></returns>
-		public static Dictionary<string, int> ObtenerMapaPorRegiones(DataTable tabla, out int filaInicioDatos)
+		public static Dictionary<string, int> ObtenerMapaPorRegiones_v01(DataTable tabla, out int filaInicioDatos)
 		{
 			filaInicioDatos = -1;
 			int filaEncabezado = -1;
