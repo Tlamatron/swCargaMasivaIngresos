@@ -135,7 +135,8 @@ namespace swCargaMasivaIngresos.Services
 						param.FolioCarga,
 						bimestre.ToString(),
 						clasePago.ToString(),
-						impuestoDeterminadoDec
+						impuestoDeterminadoDec,
+						DateTime.Now.ToString("yyyy-MM-dd")
 					);
 
 					resultado.RegistrosExitosos++;
@@ -180,6 +181,7 @@ namespace swCargaMasivaIngresos.Services
 			tabla.Columns.Add("Bimestre", typeof(string));
 			tabla.Columns.Add("ClasePago", typeof(string));
 			tabla.Columns.Add("ImpuestoDeterminado", typeof(decimal));
+			tabla.Columns.Add("FechaVigencia", typeof(string));
 			return tabla;
 		}
 
@@ -209,6 +211,7 @@ namespace swCargaMasivaIngresos.Services
 						bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
 						bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
 						bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
+						bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
 
 						await bulkCopy.WriteToServerAsync(lote);
 					}

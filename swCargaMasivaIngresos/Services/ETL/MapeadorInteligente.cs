@@ -198,7 +198,7 @@ namespace swCargaMasivaIngresos.Services
 			//	}
 			//}
 
-			
+
 			//if (filaCandidata != -1)
 			//{
 			//	filaEncabezado = filaCandidata;
@@ -219,31 +219,35 @@ namespace swCargaMasivaIngresos.Services
 
 				if (string.IsNullOrWhiteSpace(textoUnido)) continue;
 
-				// 🚀 1. EVALUACIÓN ESTRUCTURAL (Tu propuesta)
-				// Contamos cuántas celdas en esta fila son puramente numéricas.
-				// Los datos del padrón tienen Municipio, Tipo de Predio, Cuenta e Importes (mínimo 3 números).
+				// 🚀 1. EVALUACIÓN ESTRUCTURAL
 				int cantidadNumeros = celdas.Count(c => decimal.TryParse(c, out _));
 
 				if (cantidadNumeros >= 3)
 				{
-					// ¡Es matemáticamente una fila de datos! Rompemos el ciclo inmediatamente.
-					filaInicioDatos = i;
-					LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ANÁLISIS ESTRUCTURAL! Datos inician en Fila {i} (Contiene {cantidadNumeros} celdas numéricas)").Wait();
+					// 🛠️ FIX AYOTOXCO: Salvar los números de bimestres horizontales (1 al 6)
+					var numValidos = new HashSet<string> { "1", "2", "3", "4", "5", "6", "1.0", "2.0", "3.0", "4.0", "5.0", "6.0" };
+					int conteoBimestres = celdas.Count(c => numValidos.Contains(c.Replace(".00", "").Replace(".0", "").Trim()));
+
+					if (conteoBimestres >= 3)
+					{
+						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> Fila {i} salvada. Es la secuencia bimestral.").Wait();
+						continue; // Es un encabezado bimestral, lo fusionamos.
+					}
+
+					filaInicioDatos = i; // Si llegó aquí, son datos reales.
 					break;
 				}
 
-				// 🚀 2. EVALUACIÓN LÉXICA ENRIQUECIDA (Segura y Coexistente)
-				// Buscamos frases estrictas O la presencia del signo "=", que denota una leyenda de encabezado (Ej. "1= Urbano")
+				// 🚀 2. EVALUACIÓN LÉXICA ENRIQUECIDA
 				if (textoUnido.Contains("TIPO DE PREDIO") || textoUnido.Contains("CLASE DE PAGO") ||
+					textoUnido.Contains("BIMESTRE") || // <--- ESTO SALVA LA FILA QUE DICE "BIMESTRES"
 					textoUnido.Contains("IMPUESTO DETERMINADO") || textoUnido.Contains("CLAVE DEL MUNICIPIO") ||
-					textoUnido.Contains("=")) // <--- El salvavidas para Amixtlán que no choca con Lafragua
+					textoUnido.Contains("="))
 				{
-					continue; // Sigue siendo un encabezado, lo fusionamos
+					continue;
 				}
 
-				// Si no tiene muchos números, pero tampoco tiene frases de encabezado, asumimos que son datos (Ej. un cascarón con puros textos)
 				filaInicioDatos = i;
-				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] -> ¡ANÁLISIS LÉXICO! Datos inician en Fila {i}").Wait();
 				break;
 			}
 
@@ -365,7 +369,7 @@ namespace swCargaMasivaIngresos.Services
 			Asignar("ClasePago", "CLASE DE PAGO", "CLASE");
 			Asignar("BimestreConsolidado", "BIMESTRE PAGADO", "BIMESTRE", "PERIODO", "MESES");
 			Asignar("ClaveMunicipio", "CLAVE DEL MUNICIPIO", "MUNICIPIO", "CVEMUN", "MPIO");
-			Asignar("TipoPredio", "TIPO DE PREDIO", "PREDIO", "TIPO", "DESC_PRED");
+			Asignar("TipoPredio", "TIPO DE PREDIO", "PREDIO", "TIPO", "DESC_PRED","T/P");
 
 			// 🚀 2. LAS COLUMNAS OBLIGATORIAS Y PRINCIPALES
 			Asignar("CuentaPredial", "CUENTA PREDIAL","NUMERO DE CUENTA", "NO. CUENTA", "CUENTA", "CTA", "CTA.", "CLAVE");

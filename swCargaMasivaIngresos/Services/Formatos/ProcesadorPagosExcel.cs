@@ -49,7 +49,6 @@ namespace swCargaMasivaIngresos.Services
 						string bimestreInferido = "99";
 						string tipoPredioInferido = "";
 
-						// Inferir Clase de Pago y Bimestre
 						if (pestanaUpper.Contains("ANUAL"))
 						{
 							clasePagoInferida = "1";
@@ -68,7 +67,6 @@ namespace swCargaMasivaIngresos.Services
 							}
 						}
 
-						// Inferir Tipo de Predio
 						if (pestanaUpper.Contains("URBANO") && !pestanaUpper.Contains("SUB")) tipoPredioInferido = "1";
 						else if (pestanaUpper.Contains("RUSTICO") || pestanaUpper.Contains("RÚSTICO")) tipoPredioInferido = "2";
 						else if (pestanaUpper.Contains("SUB-URBANO") || pestanaUpper.Contains("SUBURBANO") || pestanaUpper.Contains("SUB")) tipoPredioInferido = "3";
@@ -125,35 +123,28 @@ namespace swCargaMasivaIngresos.Services
 
 							if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 
-							// 🚀 1. EXTRACCIÓN SEGURA DE LA LLAVE (Cuenta Predial)
+							// 🚀 1. EXTRACCIÓN SEGURA DE LA LLAVE
 							string cuentaPredial = ExtraerSeguro(fila, mapaBloqueado, "CuentaPredial", "");
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 							if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
 
-							// 🚀 DETECCIÓN DE BASURA Y SUMATORIAS FINALES
 							if (cuentaPredial.Contains("AÑO ") || cuentaPredial.Contains("REZAGO") || cuentaPredial.Contains("TOTAL") || cuentaPredial.Contains("SUMA") || cuentaPredial.Contains("CUADRO"))
 							{
 								break;
 							}
 
 							string tipoPredioHibrido = "";
-
-							// 🚀 AUTOCORRECCIÓN CUENTAS HÍBRIDAS (Ej. "U-27065")
 							if (!string.IsNullOrWhiteSpace(cuentaPredial) && cuentaPredial.Contains("-"))
 							{
 								var partes = cuentaPredial.Split('-');
 								if (partes.Length == 2)
 								{
 									string prefijo = partes[0].Trim().ToUpper();
-
 									if (prefijo == "U") tipoPredioHibrido = "1";
 									else if (prefijo == "R") tipoPredioHibrido = "2";
 									else if (prefijo == "S") tipoPredioHibrido = "3";
 
-									if (!string.IsNullOrWhiteSpace(tipoPredioHibrido))
-									{
-										cuentaPredial = partes[1].Trim();
-									}
+									if (!string.IsNullOrWhiteSpace(tipoPredioHibrido)) cuentaPredial = partes[1].Trim();
 								}
 							}
 
@@ -179,15 +170,8 @@ namespace swCargaMasivaIngresos.Services
 								if (colAnioActual != -1)
 								{
 									string valorAnioActual = fila[colAnioActual]?.ToString().Trim();
-
-									if (string.IsNullOrWhiteSpace(valorAnioActual) || valorAnioActual == "0" || valorAnioActual == "0.00")
-									{
-										continue;
-									}
-									else
-									{
-										incluyeAnioActual = true;
-									}
+									if (string.IsNullOrWhiteSpace(valorAnioActual) || valorAnioActual == "0" || valorAnioActual == "0.00" || valorAnioActual == "-") continue;
+									else incluyeAnioActual = true;
 								}
 								else
 								{
@@ -202,11 +186,7 @@ namespace swCargaMasivaIngresos.Services
 									var añosEncontrados = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
 									int anioMinimo = añosEncontrados.Min();
 									int anioMaximo = añosEncontrados.Max();
-
-									if (anioActual >= anioMinimo && anioActual <= anioMaximo)
-									{
-										incluyeAnioActual = true;
-									}
+									if (anioActual >= anioMinimo && anioActual <= anioMaximo) incluyeAnioActual = true;
 								}
 
 								if (!incluyeAnioActual && anioPredialStr != "Rezagos Anteriores")
@@ -219,25 +199,18 @@ namespace swCargaMasivaIngresos.Services
 
 							// 🚀 3. HOMOLOGACIÓN DE TIPO DE PREDIO
 							string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
-
-							if (string.IsNullOrWhiteSpace(tipoPredio))
-							{
-								tipoPredio = !string.IsNullOrWhiteSpace(tipoPredioHibrido) ? tipoPredioHibrido : tipoPredioInferido;
-							}
+							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = !string.IsNullOrWhiteSpace(tipoPredioHibrido) ? tipoPredioHibrido : tipoPredioInferido;
 
 							if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
 							else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
-							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
+							// 🛠️ FIX: Agregamos el mapeo para S-URB de Ayotoxco
+							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB") || tipoPredio == "S-URB" || tipoPredio.Contains("-URB")) tipoPredio = "3";
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
 							// 🚀 4. ASIGNACIÓN LÓGICA DE CLASE DE PAGO Y BIMESTRE
 							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
 							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
-
-							if (string.IsNullOrWhiteSpace(clasePago) && !string.IsNullOrWhiteSpace(anioPredialStr))
-							{
-								clasePago = "1";
-							}
+							if (string.IsNullOrWhiteSpace(clasePago) && !string.IsNullOrWhiteSpace(anioPredialStr)) clasePago = "1";
 
 							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
 
@@ -248,10 +221,7 @@ namespace swCargaMasivaIngresos.Services
 
 								for (int col = 0; col < tablaExcel.Columns.Count; col++)
 								{
-									if (filaEncabezados[col]?.ToString().Trim().ToUpper() == "B")
-									{
-										indicesB.Add(col);
-									}
+									if (filaEncabezados[col]?.ToString().Trim().ToUpper() == "B") indicesB.Add(col);
 								}
 
 								if (indicesB.Count > 0)
@@ -269,47 +239,35 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-							// 🚀 5. ASIGNACIONES FINALES (Fechas y Municipio)
+							// 🚀 5. ASIGNACIONES FINALES (Flexibilidad de Fecha)
 							string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
-							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
-							{
+							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null) 
 								claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
-							}
-
 							string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
-							if (string.IsNullOrWhiteSpace(fechaVigencia))
-							{
+							if (string.IsNullOrWhiteSpace(fechaVigencia)) 
 								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
-							}
-							else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
-							{
+							else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/")) 
 								fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
-							}
-							else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
-							{
+							else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada)) 
 								fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
-							}
-							else
-							{
+							else 
 								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
-							}
 
-							// 🚀 6. GENERACIÓN DE FILAS (La magia de clonación para Ayotoxco o inserción normal)
+							// 🚀 6. GENERACIÓN DE FILAS (Clonación Inteligente permitida gracias al nuevo SP)
 							var bimestresMultiples = MapeadorInteligente.ExtraerBimestresMultiplesConMonto(fila, mapaBloqueado);
 
-							// Switch Inteligente: ¿Es horizontal (Ayotoxco) o vertical (Tlacuilotepec/Lafragua)?
-							if (bimestresMultiples.Count > 0 && clasePago == "2")
+							if (bimestresMultiples.Count > 0)
 							{
-								// Layout Horizontal: Explotamos 1 fila de Excel en N filas de SQL (Una por bimestre pagado)
+								clasePago = "2"; // Fuerza el tipo de pago a Bimestral
 								foreach (var bim in bimestresMultiples)
 								{
 									DataRow nuevaFila = tablaCrudos.NewRow();
 									nuevaFila["ClaveMunicipio"] = claveMunicipio;
 									nuevaFila["TipoPredio"] = tipoPredio;
 									nuevaFila["CuentaPredial"] = cuentaPredial;
-									nuevaFila["ClasePago"] = clasePago;
-									nuevaFila["Bimestre"] = bim.Key; // Ej. "1", "2"
-									nuevaFila["ImpuestoDeterminado"] = bim.Value; // El monto cobrado en ESE bimestre exacto
+									nuevaFila["ClasePago"] = clasePago; // Pasará 2 a la base de datos
+									nuevaFila["Bimestre"] = bim.Key;
+									nuevaFila["ImpuestoDeterminado"] = bim.Value;
 									nuevaFila["FechaVigencia"] = fechaVigencia;
 									nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
 									tablaCrudos.Rows.Add(nuevaFila);
@@ -322,6 +280,8 @@ namespace swCargaMasivaIngresos.Services
 								if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
 								if (string.IsNullOrWhiteSpace(clasePago)) clasePago = "99";
 
+								if (clasePago == "1" && anioPredialStr == "-") continue;
+
 								DataRow nuevaFila = tablaCrudos.NewRow();
 								nuevaFila["ClaveMunicipio"] = claveMunicipio;
 								nuevaFila["TipoPredio"] = tipoPredio;
@@ -329,18 +289,11 @@ namespace swCargaMasivaIngresos.Services
 								nuevaFila["ClasePago"] = clasePago;
 								nuevaFila["Bimestre"] = bimestre;
 
-								// Parseo Decimal Seguro y limpieza de formato contable ($)
 								string impuestoStr = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0").Trim();
 								impuestoStr = impuestoStr.Replace("$", "").Replace(",", "").Trim();
 
-								if (decimal.TryParse(impuestoStr, out decimal impuestoDecimal))
-								{
-									nuevaFila["ImpuestoDeterminado"] = impuestoDecimal;
-								}
-								else
-								{
-									nuevaFila["ImpuestoDeterminado"] = 0m;
-								}
+								if (decimal.TryParse(impuestoStr, out decimal impuestoDecimal)) nuevaFila["ImpuestoDeterminado"] = impuestoDecimal;
+								else nuevaFila["ImpuestoDeterminado"] = 0m;
 
 								nuevaFila["FechaVigencia"] = fechaVigencia;
 								nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
@@ -355,11 +308,7 @@ namespace swCargaMasivaIngresos.Services
 						if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 						{
 							List<string> erroresLogicos = await InsertarBulkAsync(resultadoLimpieza.TablaValidos, param);
-
-							if (erroresLogicos.Any())
-							{
-								resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
-							}
+							if (erroresLogicos.Any()) resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
 						}
 
 						resultadoFinal.RegistrosExitosos += resultadoLimpieza.TablaValidos.Rows.Count;
@@ -447,6 +396,7 @@ namespace swCargaMasivaIngresos.Services
 					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
 					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
 					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
+					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
 
 					await bulkCopy.WriteToServerAsync(lote);
 				}
