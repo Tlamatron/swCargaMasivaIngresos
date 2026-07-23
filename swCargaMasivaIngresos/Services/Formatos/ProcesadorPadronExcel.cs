@@ -86,7 +86,10 @@ namespace swCargaMasivaIngresos.Services
 							// --- DATOS SEMI-OBLIGATORIOS (Alineados con la bandera 99) ---
 							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "99");
 
-							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+							//string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+							string bimestre = ExtraerSeguro(fila, mapaBloqueado, "Bimestre", "");
+							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
+
 							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
 
 							// Lógica de Fechas de Excel (Con Fallback Lógico)
