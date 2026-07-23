@@ -75,6 +75,9 @@
     <Reference Include="Microsoft.Owin.Host.SystemWeb, Version=4.2.3.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Owin.Host.SystemWeb.4.2.3\lib\net45\Microsoft.Owin.Host.SystemWeb.dll</HintPath>
     </Reference>
+    <Reference Include="NDbfReader, Version=2.4.0.0, Culture=neutral, PublicKeyToken=421d1ecd09787b1d, processorArchitecture=MSIL">
+      <HintPath>..\packages\NDbfReader.2.4.0\lib\net45\NDbfReader.dll</HintPath>
+    </Reference>
     <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <HintPath>..\packages\Newtonsoft.Json.13.0.4\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
@@ -229,6 +232,7 @@
     <Compile Include="Services\Configuracion\ConfiguracionWSService.cs" />
     <Compile Include="Services\Comunes\ControlCargasService.cs" />
     <Compile Include="Services\Configuracion\CorsSettings.cs" />
+    <Compile Include="Services\Formatos\ProcesadorPagosDBF.cs" />
     <Compile Include="Services\Integracion\FabricaAdaptadoresWS.cs" />
     <Compile Include="Services\Formatos\FabricaProcesadores.cs" />
     <Compile Include="Services\Infraestructura\GlobalExceptionHandler.cs" />

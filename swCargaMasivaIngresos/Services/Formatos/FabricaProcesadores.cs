@@ -1,4 +1,5 @@
-﻿using System;
+﻿using swCargaMasivaIngresos.Services.Formatos;
+using System;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -40,6 +41,16 @@ namespace swCargaMasivaIngresos.Services
 					case 2: return new ProcesadorPagosExcel(); 
 					case 3: return new ProcesadorReduccionesExcel();
 					default: throw new NotSupportedException($"El TipoCargaId '{tipoCargaId}' no existe en Excel.");
+				}
+			}
+
+			// 🚀 3. NUEVA RUTA: ARCHIVOS DE BASES DE DATOS ANTIGUAS (DBF)
+			if (ext == ".dbf")
+			{
+				switch (tipoCargaId)
+				{
+					case 2: return new ProcesadorPagosDBF();
+					default: throw new NotSupportedException($"El TipoCargaId '{tipoCargaId}' no está soportado para archivos DBF.");
 				}
 			}
 
