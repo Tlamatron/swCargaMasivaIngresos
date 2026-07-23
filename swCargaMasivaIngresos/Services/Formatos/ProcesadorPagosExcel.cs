@@ -117,8 +117,25 @@ namespace swCargaMasivaIngresos.Services
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraRaw();
 
-						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Iniciando bucle en fila {filaInicioDatos}").Wait();
+						// ==============================================================================
+						// 🚀 NUEVO: PRE-ESCANEO DE SEGURIDAD (Regla de Descarte Estricto)
+						// ==============================================================================
+						bool archivoTienePagosBimestrales = mapaBloqueado.BimestresSueltos.Count > 0;
+						if (!archivoTienePagosBimestrales)
+						{
+							for (int r = filaInicioDatos; r < tablaExcel.Rows.Count; r++)
+							{
+								string textoPreFila = string.Join(" ", tablaExcel.Rows[r].ItemArray).ToUpper();
+								if (textoPreFila.Contains("BIMESTRAL") || textoPreFila.Contains("BIMESTRE") || textoPreFila.Contains("BIM "))
+								{
+									archivoTienePagosBimestrales = true;
+									break; // Si encontramos al menos uno, ya tenemos punto de referencia
+								}
+							}
+						}
 
+						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Iniciando bucle en fila {filaInicioDatos}. Referencia Bimestral Encontrada: {archivoTienePagosBimestrales}").Wait();
+						
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
 							var fila = tablaExcel.Rows[i];
@@ -132,6 +149,12 @@ namespace swCargaMasivaIngresos.Services
 							// 🚀 1. EXTRACCIÓN SEGURA DE LA LLAVE
 							string cuentaPredial = ExtraerSeguro(fila, mapaBloqueado, "CuentaPredial", "");
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
+
+							if (cuentaPredial.ToUpper().Contains("(BIMESTRAL)"))
+							{
+								cuentaPredial = cuentaPredial.ToUpper().Replace("(BIMESTRAL)", "").Trim();
+							}
+
 							if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
 
 							if (cuentaPredial.Contains("AÑO ") || cuentaPredial.Contains("REZAGO") || cuentaPredial.Contains("TOTAL") || cuentaPredial.Contains("SUMA") || cuentaPredial.Contains("CUADRO"))
