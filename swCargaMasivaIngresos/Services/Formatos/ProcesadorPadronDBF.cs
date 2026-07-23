@@ -10,19 +10,10 @@ using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services.Formatos
 {
-	/// <summary>
-	/// Clase ProcesadorPadronDBF que implementa la interfaz IProcesadorFormato. Este procesador se encarga de leer archivos heredados en formato DBF (dBase/FoxPro) que contienen datos de padrón, mapearlos, limpiarlos y validarlos, y finalmente insertar los registros válidos en la base de datos mediante una operación de inserción masiva.
-	/// </summary>
 	public class ProcesadorPadronDBF : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
-		/// <summary>
-		/// Procesa un archivo DBF de padrón, mapea sus columnas a una estructura interna, limpia y valida los datos, y realiza la inserción masiva en la base de datos.
-		/// </summary>
-		/// <param name="rutaArchivo"></param>
-		/// <param name="param"></param>
-		/// <returns></returns>
 		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -44,7 +35,6 @@ namespace swCargaMasivaIngresos.Services.Formatos
 						return resultadoFinal;
 					}
 
-					// Mapeo dinámico de columnas típicas de DBF
 					string colCuenta = columnNames.FirstOrDefault(c => c == "NO_CONTROL" || c == "CUENTA") ?? "";
 					string colTipoPredio = columnNames.FirstOrDefault(c => c == "TIPO_PRED" || c == "TIPO" || c == "T_PREDIO") ?? "";
 					string colNombre = columnNames.FirstOrDefault(c => c == "NOMBRE" || c == "PROPIETARI") ?? "";
@@ -56,7 +46,7 @@ namespace swCargaMasivaIngresos.Services.Formatos
 
 					if (string.IsNullOrEmpty(colCuenta))
 					{
-						resultadoFinal.ErroresDetalle.Add("Rechazo Total: No se encontró la columna de Cuenta Predial (NO_CONTROL o CUENTA).");
+						resultadoFinal.ErroresDetalle.Add("Rechazo Total: No se encontró la columna de Cuenta Predial.");
 						return resultadoFinal;
 					}
 
@@ -75,7 +65,7 @@ namespace swCargaMasivaIngresos.Services.Formatos
 						else if (tipoPredioCrudo.ToUpper().StartsWith("S")) tipoPredio = "3";
 
 						string clasePago = "1";
-						string bimestre = "99";
+						string bimestre = "0";
 						string bimEmi = !string.IsNullOrEmpty(colBimEmi) ? (reader.GetString(colBimEmi)?.Trim() ?? "0") : "0";
 						if (bimEmi != "0" && bimEmi != "") { clasePago = "2"; bimestre = bimEmi; }
 
@@ -134,10 +124,6 @@ namespace swCargaMasivaIngresos.Services.Formatos
 			return resultadoFinal;
 		}
 
-		/// <summary>
-		/// Crea la estructura de un DataTable para almacenar temporalmente los datos del padrón antes de ser insertados en la base de datos. Esta estructura incluye todas las columnas necesarias para representar un registro completo del padrón, incluyendo información de ubicación, propietario, impuestos y metadatos de carga.
-		/// </summary>
-		/// <returns></returns>
 		private DataTable CrearEstructuraPadronCompleta()
 		{
 			var tabla = new DataTable();
@@ -168,13 +154,7 @@ namespace swCargaMasivaIngresos.Services.Formatos
 			tabla.Columns.Add("FolioCarga", typeof(string));
 			return tabla;
 		}
-		
-		/// <summary>
-		/// Realiza la inserción masiva de los registros del padrón en la base de datos utilizando SqlBulkCopy. Después de insertar los registros en la tabla de staging, ejecuta un procedimiento almacenado para procesar y consolidar los datos en las tablas finales. Este método es asíncrono y permite manejar grandes volúmenes de datos de manera eficiente.
-		/// </summary>
-		/// <param name="lote"></param>
-		/// <param name="param"></param>
-		/// <returns></returns>
+
 		private async Task<List<string>> InsertarBulkPadronCompletoAsync(DataTable lote, ParametrosCarga param)
 		{
 			var erroresConsolidacion = new List<string>();

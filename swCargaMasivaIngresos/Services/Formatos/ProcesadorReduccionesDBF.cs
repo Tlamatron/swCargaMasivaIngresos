@@ -10,19 +10,10 @@ using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services.Formatos
 {
-	/// <summary>
-	/// Clase ProcesadorReduccionesDBF que implementa la interfaz IProcesadorFormato. Este procesador se encarga de leer archivos heredados en formato DBF (dBase/FoxPro) que contienen datos de reducciones, mapearlos, limpiarlos y validarlos, y finalmente insertar los registros válidos en la base de datos mediante una operación de inserción masiva.
-	/// </summary>
 	public class ProcesadorReduccionesDBF : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
-		/// <summary>
-		/// Procesa un archivo DBF de reducciones de manera asíncrona. Lee el archivo, valida su estructura y contenido, y realiza la inserción masiva de los registros válidos en la base de datos. Devuelve un objeto ResultadoProceso que contiene información sobre los registros procesados, incluyendo los exitosos, fallidos y detalles de errores.
-		/// </summary>
-		/// <param name="rutaArchivo"></param>
-		/// <param name="param"></param>
-		/// <returns></returns>
 		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -70,7 +61,6 @@ namespace swCargaMasivaIngresos.Services.Formatos
 
 						string tipoReduccionStr = reader.GetString(colReduccion)?.Trim() ?? "";
 
-						// Validamos regla de negocio (Debe ser numérico)
 						if (!byte.TryParse(tipoReduccionStr, out byte tipoRed) || tipoRed < 1)
 						{
 							resultadoFinal.RegistrosFallidos++;
@@ -107,10 +97,6 @@ namespace swCargaMasivaIngresos.Services.Formatos
 			return resultadoFinal;
 		}
 
-		/// <summary>
-		/// Crea la estructura de la tabla en memoria para almacenar temporalmente los registros de reducciones antes de insertarlos en la base de datos. La tabla contiene columnas para ClaveMunicipio, TipoPredio, CuentaPredial, FolioUnico, TipoReduccion y FolioCarga.
-		/// </summary>
-		/// <returns></returns>
 		private DataTable CrearEstructuraReducciones()
 		{
 			var tabla = new DataTable();
@@ -123,12 +109,6 @@ namespace swCargaMasivaIngresos.Services.Formatos
 			return tabla;
 		}
 
-		/// <summary>
-		/// Realiza la inserción masiva de los registros de reducciones en la base de datos utilizando SqlBulkCopy. Después de insertar los registros en la tabla de staging, ejecuta un procedimiento almacenado para procesar y consolidar los datos en las tablas finales. Este método es asíncrono y permite manejar grandes volúmenes de datos de manera eficiente.
-		/// </summary>
-		/// <param name="lote"></param>
-		/// <param name="param"></param>
-		/// <returns></returns>
 		private async Task InsertarBulkAsync(DataTable lote, ParametrosCarga param)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
