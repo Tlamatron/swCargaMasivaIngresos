@@ -232,7 +232,9 @@
     <Compile Include="Services\Configuracion\ConfiguracionWSService.cs" />
     <Compile Include="Services\Comunes\ControlCargasService.cs" />
     <Compile Include="Services\Configuracion\CorsSettings.cs" />
+    <Compile Include="Services\Formatos\ProcesadorPadronDBF.cs" />
     <Compile Include="Services\Formatos\ProcesadorPagosDBF.cs" />
+    <Compile Include="Services\Formatos\ProcesadorReduccionesDBF.cs" />
     <Compile Include="Services\Integracion\FabricaAdaptadoresWS.cs" />
     <Compile Include="Services\Formatos\FabricaProcesadores.cs" />
     <Compile Include="Services\Infraestructura\GlobalExceptionHandler.cs" />

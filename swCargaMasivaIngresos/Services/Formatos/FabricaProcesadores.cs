@@ -49,7 +49,9 @@ namespace swCargaMasivaIngresos.Services
 			{
 				switch (tipoCargaId)
 				{
+					case 1: return new ProcesadorPadronDBF();
 					case 2: return new ProcesadorPagosDBF();
+					case 3: return new ProcesadorReduccionesDBF(); 
 					default: throw new NotSupportedException($"El TipoCargaId '{tipoCargaId}' no está soportado para archivos DBF.");
 				}
 			}

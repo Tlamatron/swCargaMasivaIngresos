@@ -19,6 +19,12 @@ namespace swCargaMasivaIngresos.Services.Formatos
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+		/// <summary>
+		/// Procesa un archivo DBF, extrayendo los datos relevantes y realizando validaciones.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
