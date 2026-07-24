@@ -161,7 +161,13 @@ namespace swCargaMasivaIngresos.Services
 					if (tablaLote.Rows.Count >= 10000)
 					{
 						List<string> erroresLogicos = await InsertarLoteEnBDAsync(tablaLote, param);
-						if (erroresLogicos.Count > 0) resultado.ErroresDetalle.AddRange(erroresLogicos);
+						if (erroresLogicos.Count > 0) 
+						{ 
+							resultado.ErroresDetalle.AddRange(erroresLogicos);
+							// 🚀 FIX: Matemáticas honestas para disparar el correo con CSV
+							resultado.RegistrosFallidos += erroresLogicos.Count;
+							resultado.RegistrosExitosos -= erroresLogicos.Count;
+						}
 						tablaLote.Clear();
 					}
 				}
@@ -169,7 +175,13 @@ namespace swCargaMasivaIngresos.Services
 				if (tablaLote.Rows.Count > 0)
 				{
 					List<string> erroresLogicos = await InsertarLoteEnBDAsync(tablaLote, param);
-					if (erroresLogicos.Count > 0) resultado.ErroresDetalle.AddRange(erroresLogicos);
+					if (erroresLogicos.Count > 0) 
+					{ 
+						resultado.ErroresDetalle.AddRange(erroresLogicos);
+						// 🚀 FIX: Matemáticas honestas para disparar el correo con CSV
+						resultado.RegistrosFallidos += erroresLogicos.Count;
+						resultado.RegistrosExitosos -= erroresLogicos.Count;
+					}
 				}
 			}
 

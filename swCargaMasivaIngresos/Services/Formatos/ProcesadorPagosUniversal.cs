@@ -151,6 +151,10 @@ namespace swCargaMasivaIngresos.Services
 						if (erroresLogicos.Any())
 						{
 							resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
+
+							// 🚀 FIX: Matemáticas honestas para disparar el correo con CSV
+							resultadoFinal.RegistrosFallidos += erroresLogicos.Count;
+							resultadoFinal.RegistrosExitosos -= erroresLogicos.Count;
 						}
 					}
 
