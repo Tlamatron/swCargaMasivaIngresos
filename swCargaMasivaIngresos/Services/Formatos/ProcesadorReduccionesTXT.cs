@@ -163,14 +163,27 @@ namespace swCargaMasivaIngresos.Services
 
 					if (tablaLote.Rows.Count >= 10000)
 					{
-						await InsertarLoteEnBDAsync(tablaLote, param);
+						List<string> erroresLogicos = await InsertarLoteEnBDAsync(tablaLote, param);
+						if (erroresLogicos.Count > 0)
+						{
+							resultado.ErroresDetalle.AddRange(erroresLogicos);
+							resultado.RegistrosFallidos += erroresLogicos.Count;
+							resultado.RegistrosExitosos -= erroresLogicos.Count; // Restamos los falsos éxitos
+						}
 						tablaLote.Clear();
 					}
 				}
 
 				if (tablaLote.Rows.Count > 0)
 				{
-					await InsertarLoteEnBDAsync(tablaLote, param);
+					List<string> erroresLogicos = await InsertarLoteEnBDAsync(tablaLote, param);
+					if (erroresLogicos.Count > 0)
+					{
+						resultado.ErroresDetalle.AddRange(erroresLogicos);
+						resultado.RegistrosFallidos += erroresLogicos.Count;
+						resultado.RegistrosExitosos -= erroresLogicos.Count; // Restamos los falsos éxitos
+					}
+					tablaLote.Clear();
 				}
 			}
 
@@ -209,8 +222,9 @@ namespace swCargaMasivaIngresos.Services
 		/// Método privado asíncrono para ejecutar la ingesta masiva de reducciones.
 		/// Nota: La consolidación lógica queda comentada hasta que se defina la regla de negocio.
 		/// </summary>
-		private async Task InsertarLoteEnBDAsync(DataTable lote, ParametrosCarga param)
+		private async Task<List<string>> InsertarLoteEnBDAsync(DataTable lote, ParametrosCarga param)
 		{
+			var errores = new List<string>();
 			try
 			{
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
@@ -232,7 +246,14 @@ namespace swCargaMasivaIngresos.Services
 						cmd.CommandTimeout = 180;
 						cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
 
-						await cmd.ExecuteNonQueryAsync();
+						//await cmd.ExecuteNonQueryAsync();
+						using (var reader = await cmd.ExecuteReaderAsync())
+						{
+							while (await reader.ReadAsync())
+							{
+								errores.Add($"[Reducciones TXT] Cuenta {reader["CuentaPredial"]}: {reader["MensajeError"]}");
+							}
+						}
 					}
 				}
 			}
@@ -241,6 +262,7 @@ namespace swCargaMasivaIngresos.Services
 				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "SqlBulkCopy/SP Reducciones TXT", ex.Message).Wait();
 				throw;
 			}
+			return errores;
 		}
 	}
 }

@@ -150,6 +150,10 @@ namespace swCargaMasivaIngresos.Services
 							if (erroresLogicos.Any())
 							{
 								resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
+
+								// 🚀 MATEMÁTICAS HONESTAS: Convertimos los éxitos falsos en fallos reales
+								resultadoFinal.RegistrosFallidos += erroresLogicos.Count;
+								resultadoFinal.RegistrosExitosos -= erroresLogicos.Count;
 							}
 						}
 

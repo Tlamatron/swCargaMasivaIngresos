@@ -104,11 +104,21 @@ namespace swCargaMasivaIngresos.Services
 							tablaCrudos.Rows.Add(nuevaFila);
 						}
 
-						// 🚀 EJECUCIÓN ASÍNCRONA A BASE DE DATOS
+						// 🚀 EJECUCIÓN ASÍNCRONA A BASE DE DATOS CON MATEMÁTICAS HONESTAS
 						if (tablaCrudos.Rows.Count > 0)
 						{
-							await InsertarBulkAsync(tablaCrudos, param);
-							resultadoFinal.RegistrosExitosos += tablaCrudos.Rows.Count;
+							List<string> erroresLogicos = await InsertarBulkAsync(tablaCrudos, param);
+
+							if (erroresLogicos.Any())
+							{
+								resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
+								resultadoFinal.RegistrosFallidos += erroresLogicos.Count;
+								resultadoFinal.RegistrosExitosos += (tablaCrudos.Rows.Count - erroresLogicos.Count);
+							}
+							else
+							{
+								resultadoFinal.RegistrosExitosos += tablaCrudos.Rows.Count;
+							}
 						}
 					}
 				}
@@ -157,8 +167,9 @@ namespace swCargaMasivaIngresos.Services
 		/// Método asíncrono que realiza la inserción masiva a Staging y ejecuta la ingesta de las reducciones.
 		/// Nota: La consolidación final de reducciones queda pendiente de reglas de negocio futuras.
 		/// </summary>
-		private async Task InsertarBulkAsync(DataTable lote, ParametrosCarga param)
+		private async Task<List<string>> InsertarBulkAsync(DataTable lote, ParametrosCarga param)
 		{
+			var errores = new List<string>();
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
 				await conn.OpenAsync();
@@ -187,11 +198,19 @@ namespace swCargaMasivaIngresos.Services
 					cmd.CommandTimeout = 180;
 					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
 
-					await cmd.ExecuteNonQueryAsync();
+					using (var reader = await cmd.ExecuteReaderAsync())
+					{
+						while (await reader.ReadAsync())
+						{
+							string cuenta = reader["CuentaPredial"].ToString();
+							string mensaje = reader["MensajeError"].ToString();
+							errores.Add($"[Reducciones] Cuenta {cuenta}: {mensaje}");
+						}
+					}
 				}
-
 				// PASO 3: Consolidación (Omitido intencionalmente hasta definir reglas de negocio)
 			}
+			return errores;
 		}
 	}
 }

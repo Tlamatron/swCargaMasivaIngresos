@@ -101,7 +101,14 @@ namespace swCargaMasivaIngresos.Services.Formatos
 					if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 					{
 						List<string> erroresLogicos = await InsertarBulkAsync(resultadoLimpieza.TablaValidos, param);
-						if (erroresLogicos.Any()) resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
+						if (erroresLogicos.Any()) 
+						{ 
+							resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
+							
+							// 🚀 MATEMÁTICAS HONESTAS: Convertimos los éxitos falsos en fallos reales
+							resultadoFinal.RegistrosFallidos += erroresLogicos.Count;
+							resultadoFinal.RegistrosExitosos -= erroresLogicos.Count;
+						}
 					}
 
 					resultadoFinal.RegistrosExitosos += resultadoLimpieza.TablaValidos.Rows.Count;
