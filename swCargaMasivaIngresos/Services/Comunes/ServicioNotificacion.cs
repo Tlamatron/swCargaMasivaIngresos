@@ -92,7 +92,15 @@ namespace swCargaMasivaIngresos.Services
 						// =========================================================================
 						// DETECCIÓN VISUAL DE ERROR FATAL
 						// =========================================================================
-						bool esErrorFatal = resultado.RegistrosExitosos == 0 && resultado.TablaRechazados == null && resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0;
+						// 🚀 FIX: Un error es fatal SOLO si no hubo NI exitosos NI fallidos de negocio reportados. 
+						// Si hay fallidos contados matemáticamente (ej. 1317), entonces fue un escaneo exitoso que rebotó en reglas de negocio.
+
+						//bool esErrorFatal = resultado.RegistrosExitosos == 0 && resultado.TablaRechazados == null && resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0;
+
+						bool esErrorFatal = resultado.RegistrosExitosos == 0
+										 && resultado.RegistrosFallidos == 0
+										 && resultado.ErroresDetalle != null
+										 && resultado.ErroresDetalle.Count > 0;
 
 						if (esErrorFatal)
 						{
