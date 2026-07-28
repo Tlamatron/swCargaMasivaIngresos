@@ -158,7 +158,9 @@ namespace swCargaMasivaIngresos.Services
 						bimestre.ToString(),
 						clasePago.ToString(),
 						impuestoDeterminadoDec,
-						DateTime.Now.ToString("yyyy-MM-dd")
+						DateTime.Now.ToString("yyyy-MM-dd"),
+						DBNull.Value, // 🚀 FALTABA: IdControl
+						DBNull.Value  // 🚀 FALTABA: FolioEmision
 					);
 
 					resultado.RegistrosExitosos++;
@@ -216,6 +218,9 @@ namespace swCargaMasivaIngresos.Services
 			tabla.Columns.Add("ClasePago", typeof(string));
 			tabla.Columns.Add("ImpuestoDeterminado", typeof(decimal));
 			tabla.Columns.Add("FechaVigencia", typeof(string));
+
+			tabla.Columns.Add("IdControl", typeof(int));
+			tabla.Columns.Add("FolioEmision", typeof(int));
 			return tabla;
 		}
 
@@ -246,6 +251,9 @@ namespace swCargaMasivaIngresos.Services
 						bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
 						bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
 						bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
+
+						bulkCopy.ColumnMappings.Add("IdControl", "IdControl");
+						bulkCopy.ColumnMappings.Add("FolioEmision", "FolioEmision");
 
 						await bulkCopy.WriteToServerAsync(lote);
 					}

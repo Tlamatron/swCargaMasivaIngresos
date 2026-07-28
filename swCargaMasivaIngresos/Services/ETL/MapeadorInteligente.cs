@@ -616,6 +616,9 @@ namespace swCargaMasivaIngresos.Services
 			Asignar("FechaVigencia", "FECHA", "VIGENCIA");
 			Asignar("BaseGravable", "BASE GRAVABLE", "BASE", "VALOR CATASTRAL", "VALOR");
 
+			Asignar("IdControl", "NO_CONTROL", "NO CONTROL", "ID_CONTROL");
+			Asignar("FolioEmision", "FOLIO", "FOLIO_EMISION");
+
 			// 🚀 3. EL NUEVO ENTRENAMIENTO: TODA LA DEMOGRAFÍA OPCIONAL DEL PADRÓN
 			Asignar("FolioUnico", "FOLIO UNICO", "FOLIO ÚNICO", "FOLIO", "CONTROL", "NÚM. DE CONTROL", "NUM. DE CONTROL");
 			Asignar("Localidad", "LOCALIDAD", "POBLACION", "POBLACIÓN", "CIUDAD");

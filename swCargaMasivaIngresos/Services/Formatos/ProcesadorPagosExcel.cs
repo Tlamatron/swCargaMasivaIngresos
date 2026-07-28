@@ -385,6 +385,14 @@ namespace swCargaMasivaIngresos.Services
 									nuevaFila["ImpuestoDeterminado"] = bim.Value;
 									nuevaFila["FechaVigencia"] = fechaVigencia;
 									nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
+
+									// Lees el valor crudo o dejas nulo si falla
+									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "IdControl", ""), out int idCtrl)) nuevaFila["IdControl"] = idCtrl;
+									else nuevaFila["IdControl"] = DBNull.Value;
+
+									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", ""), out int folEmi)) nuevaFila["FolioEmision"] = folEmi;
+									else nuevaFila["FolioEmision"] = DBNull.Value;
+
 									tablaCrudos.Rows.Add(nuevaFila);
 								}
 							}
@@ -440,6 +448,8 @@ namespace swCargaMasivaIngresos.Services
 
 								nuevaFila["FechaVigencia"] = fechaVigencia;
 								nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
+								nuevaFila["IdControl"] = DBNull.Value;
+								nuevaFila["FolioEmision"] = DBNull.Value;
 								tablaCrudos.Rows.Add(nuevaFila);
 							}
 						}
@@ -516,6 +526,9 @@ namespace swCargaMasivaIngresos.Services
 			dt.Columns.Add("ImpuestoDeterminado", typeof(decimal)); // Blindaje Lafragua
 			dt.Columns.Add("FechaVigencia", typeof(string));
 			dt.Columns.Add("FolioCarga", typeof(string));
+
+			dt.Columns.Add("IdControl", typeof(int));
+			dt.Columns.Add("FolioEmision", typeof(int));
 			return dt;
 		}
 
@@ -547,6 +560,9 @@ namespace swCargaMasivaIngresos.Services
 					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
 					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
 					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
+
+					bulkCopy.ColumnMappings.Add("IdControl", "IdControl");
+					bulkCopy.ColumnMappings.Add("FolioEmision", "FolioEmision");
 
 					await bulkCopy.WriteToServerAsync(lote);
 				}
