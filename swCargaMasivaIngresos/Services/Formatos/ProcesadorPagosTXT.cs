@@ -122,9 +122,14 @@ namespace swCargaMasivaIngresos.Services
 
 					if (!string.IsNullOrWhiteSpace(clasePagoStr))
 					{
+						// 🚀 NUEVA REGLA: Traducción de texto a número
+						string cpUpper = clasePagoStr.ToUpper();
+						if (cpUpper == "ANUAL" || cpUpper == "A") clasePagoStr = "1";
+						else if (cpUpper == "BIMESTRAL" || cpUpper == "B" || cpUpper.StartsWith("BIM")) clasePagoStr = "2";
+
 						if (!byte.TryParse(clasePagoStr, out clasePago) || (clasePago != 1 && clasePago != 2))
 						{
-							MarcarError(resultado, numeroLinea, "Clase de Pago inválida (1=Anual, 2=Bimestral).");
+							MarcarError(resultado, numeroLinea, $"Clase de Pago inválida ('{clasePagoStr}'). Debe ser 1 (Anual) o 2 (Bimestral).");
 							continue;
 						}
 					}

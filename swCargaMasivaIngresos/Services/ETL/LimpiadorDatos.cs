@@ -72,8 +72,20 @@ namespace swCargaMasivaIngresos.Services
 				string claveMun = fila["ClaveMunicipio"]?.ToString().Trim();
 				string tipoPre = fila["TipoPredio"]?.ToString().Trim();
 				string cuenta = fila["CuentaPredial"]?.ToString().Trim();
-				string clasePago = fila["ClasePago"]?.ToString().Trim();
+				string clasePago = fila["ClasePago"]?.ToString().Trim().ToUpper(); // 🚀 IMPORTANTE: Agregar .ToUpper()
 				string bimestre = fila["Bimestre"]?.ToString().Trim();
+
+				// =======================================================================
+				// 🚀 NUEVA REGLA: Traducción de Catálogo (Texto a ID)
+				// =======================================================================
+				if (clasePago == "ANUAL" || clasePago == "A")
+				{
+					clasePago = "1";
+				}
+				else if (clasePago == "BIMESTRAL" || clasePago == "B" || clasePago.StartsWith("BIM"))
+				{
+					clasePago = "2";
+				}
 				string impuestoStr = fila["ImpuestoDeterminado"]?.ToString().Trim();
 				string fechaStr = fila["FechaVigencia"]?.ToString().Trim();
 
