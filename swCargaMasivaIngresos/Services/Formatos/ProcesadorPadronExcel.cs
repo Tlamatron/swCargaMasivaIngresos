@@ -67,9 +67,15 @@ namespace swCargaMasivaIngresos.Services
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 							if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
 
-							string anioPredial = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio");
-							if (string.IsNullOrWhiteSpace(anioPredial)) anioPredial = DateTime.Now.Year.ToString();
-							if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+							// 🚀 NUEVA LÓGICA DE REZAGOS (PADRÓN): Extraemos el año sin bloquearlo
+							string anioPredialStr = MapeadorInteligente.Extraer(fila, mapaBloqueado, "Anio").ToUpper().Trim();
+							int anioFiscal = DateTime.Now.Year;
+
+							var matchAnio = System.Text.RegularExpressions.Regex.Match(anioPredialStr, @"\b(19\d\d|20\d\d)\b");
+							if (matchAnio.Success)
+							{
+								anioFiscal = int.Parse(matchAnio.Value);
+							}
 
 							string tipoPredio = MapeadorInteligente.Extraer(fila, mapaBloqueado, "TipoPredio").ToUpper().Trim();
 							if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
@@ -92,12 +98,12 @@ namespace swCargaMasivaIngresos.Services
 
 							if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
 
-							// Lógica de Fechas de Excel (Con Fallback Lógico)
+							// Lógica de Fechas de Excel (Con Fallback Lógico Histórico)
 							string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
 
 							if (string.IsNullOrWhiteSpace(fechaVigencia))
 							{
-								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+								fechaVigencia = new DateTime(anioFiscal, 12, 31).ToString("yyyy-MM-dd");
 							}
 							else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
 							{
@@ -106,6 +112,10 @@ namespace swCargaMasivaIngresos.Services
 							else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
 							{
 								fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
+							}
+							else
+							{
+								fechaVigencia = new DateTime(anioFiscal, 12, 31).ToString("yyyy-MM-dd");
 							}
 
 							// 🚀 2. LLENADO DE LA TABLA

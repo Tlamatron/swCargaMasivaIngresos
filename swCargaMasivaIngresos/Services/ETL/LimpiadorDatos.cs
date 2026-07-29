@@ -119,7 +119,7 @@ namespace swCargaMasivaIngresos.Services
 				if (tipoPre?.Equals("S", StringComparison.OrdinalIgnoreCase) == true) tipoPre = "3";
 
 				// =======================================================================
-				// 🚀 REGLA C: Motor de Inferencia por Pestaña (Ayotoxco y Otros)
+				// 🚀 REGLA C: Motor de Inferencia por Pestaña (Fechas Dinámicas)
 				// =======================================================================
 				if (!string.IsNullOrWhiteSpace(contextoPestaña))
 				{
@@ -127,36 +127,25 @@ namespace swCargaMasivaIngresos.Services
 
 					if (string.IsNullOrWhiteSpace(fechaStr))
 					{
-						if (pestañaMayus.Contains("ENERO")) fechaStr = "02/01/2026";
-						else if (pestañaMayus.Contains("FEBRERO")) fechaStr = "03/02/2026";
-						else if (pestañaMayus.Contains("MARZO")) fechaStr = "02/03/2026";
-						else if (pestañaMayus.Contains("ABRIL")) fechaStr = "01/04/2026";
-						else if (pestañaMayus.Contains("MAYO")) fechaStr = "04/05/2026";
-						else if (pestañaMayus.Contains("JUNIO")) fechaStr = "01/06/2026";
-					}
+						// Intentamos rescatar el año del nombre de la pestaña (Ej. "REzagos 2023")
+						int anioInferencia = DateTime.Now.Year;
+						var matchAnio = System.Text.RegularExpressions.Regex.Match(pestañaMayus, @"\b(19\d\d|20\d\d)\b");
+						if (matchAnio.Success) anioInferencia = int.Parse(matchAnio.Value);
 
-					if (string.IsNullOrWhiteSpace(clasePago))
-					{
-						if (pestañaMayus.Contains("ANUAL") || pestañaMayus.Contains("ENERO") || pestañaMayus.Contains("FEBRERO"))
-							clasePago = "1";
-						else if (pestañaMayus.Contains("BIMESTRAL") || pestañaMayus.Contains("BIMESTRE") || pestañaMayus.Contains("-BIM") || pestañaMayus.Contains(" BIM"))
-							clasePago = "2";
-					}
-
-					if (string.IsNullOrWhiteSpace(tipoPre))
-					{
-						if (pestañaMayus.Contains("SUB-URBANO") || pestañaMayus.Contains("SUBURBANO") || pestañaMayus.Contains("SUB")) tipoPre = "3";
-						else if (pestañaMayus.Contains("URBANO")) tipoPre = "1";
-						else if (pestañaMayus.Contains("RUSTICO") || pestañaMayus.Contains("RÚSTICO")) tipoPre = "2";
+						if (pestañaMayus.Contains("ENERO")) fechaStr = $"02/01/{anioInferencia}";
+						else if (pestañaMayus.Contains("FEBRERO")) fechaStr = $"03/02/{anioInferencia}";
+						else if (pestañaMayus.Contains("MARZO")) fechaStr = $"02/03/{anioInferencia}";
+						else if (pestañaMayus.Contains("ABRIL")) fechaStr = $"01/04/{anioInferencia}";
+						else if (pestañaMayus.Contains("MAYO")) fechaStr = $"04/05/{anioInferencia}";
+						else if (pestañaMayus.Contains("JUNIO")) fechaStr = $"01/06/{anioInferencia}";
 					}
 				}
-
-				// =======================================================================
-				// 🚀 REGLA D: Fallback Seguro de Municipio (Prevención Error 500)
-				// =======================================================================
-				// Si desde el Front - End se indicó que esta carga es para un municipio destino,
-				// validamos que el Excel no traiga "errores de dedo" apuntando a otros municipios.
-				if (param != null && param.ClaveMunicipioDestino > 0)
+					// =======================================================================
+					// 🚀 REGLA D: Fallback Seguro de Municipio (Prevención Error 500)
+					// =======================================================================
+					// Si desde el Front - End se indicó que esta carga es para un municipio destino,
+					// validamos que el Excel no traiga "errores de dedo" apuntando a otros municipios.
+					if (param != null && param.ClaveMunicipioDestino > 0)
 				{
 					if (short.TryParse(claveMun, out short numMpioEvaluado))
 					{

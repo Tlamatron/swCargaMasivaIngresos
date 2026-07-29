@@ -204,54 +204,85 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-							// 🚀 2. EXTRACCIÓN Y EVALUACIÓN DE AÑOS PAGADOS
+							// 🚀 2. EXTRACCIÓN HISTÓRICA DE AÑOS PAGADOS
 							string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "").ToUpper().Trim();
-							bool incluyeAnioActual = false;
-							int anioActual = DateTime.Now.Year;
+							int anioFiscal = DateTime.Now.Year;
 
 							if (string.IsNullOrWhiteSpace(anioPredialStr))
 							{
-								int colAnioActual = -1;
-								string anioActualStr = anioActual.ToString();
-
+								// Buscamos si hay alguna columna en el Excel que sea un año (ej. columna "2024")
 								foreach (var kvp in mapaCrudo)
 								{
-									if (kvp.Key.StartsWith(anioActualStr))
+									if (System.Text.RegularExpressions.Regex.IsMatch(kvp.Key, @"^(19|20)\d\d$"))
 									{
-										colAnioActual = kvp.Value;
-										break;
+										string valorAnioEncontrado = fila[kvp.Value]?.ToString().Trim();
+										if (!string.IsNullOrWhiteSpace(valorAnioEncontrado) && valorAnioEncontrado != "0" && valorAnioEncontrado != "0.00" && valorAnioEncontrado != "-")
+										{
+											anioFiscal = int.Parse(kvp.Key);
+											break;
+										}
 									}
-								}
-
-								if (colAnioActual != -1)
-								{
-									string valorAnioActual = fila[colAnioActual]?.ToString().Trim();
-									if (string.IsNullOrWhiteSpace(valorAnioActual) || valorAnioActual == "0" || valorAnioActual == "0.00" || valorAnioActual == "-") continue;
-									else incluyeAnioActual = true;
-								}
-								else
-								{
-									incluyeAnioActual = true;
 								}
 							}
 							else
 							{
-								var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\d{4}");
+								var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\b(19\d\d|20\d\d)\b");
 								if (matches.Count > 0)
 								{
-									var añosEncontrados = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
-									int anioMinimo = añosEncontrados.Min();
-									int anioMaximo = añosEncontrados.Max();
-									if (anioActual >= anioMinimo && anioActual <= anioMaximo) incluyeAnioActual = true;
-								}
-
-								if (!incluyeAnioActual && anioPredialStr != "Rezagos Anteriores")
-								{
-									resultadoFinal.RegistrosFallidos++;
-									resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El periodo de pago '{anioPredialStr}' de la cuenta {cuentaPredial} no incluye el ejercicio fiscal en curso ({anioActual}).");
-									continue;
+									// Si hay varios años en la celda (ej. "2021-2023"), tomamos el más antiguo o el primero para la fecha base
+									anioFiscal = int.Parse(matches[0].Value);
 								}
 							}
+
+
+
+							//string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "").ToUpper().Trim();
+							//bool incluyeAnioActual = false;
+							//int anioActual = DateTime.Now.Year;
+
+							//if (string.IsNullOrWhiteSpace(anioPredialStr))
+							//{
+							//	int colAnioActual = -1;
+							//	string anioActualStr = anioActual.ToString();
+
+							//	foreach (var kvp in mapaCrudo)
+							//	{
+							//		if (kvp.Key.StartsWith(anioActualStr))
+							//		{
+							//			colAnioActual = kvp.Value;
+							//			break;
+							//		}
+							//	}
+
+							//	if (colAnioActual != -1)
+							//	{
+							//		string valorAnioActual = fila[colAnioActual]?.ToString().Trim();
+							//		if (string.IsNullOrWhiteSpace(valorAnioActual) || valorAnioActual == "0" || valorAnioActual == "0.00" || valorAnioActual == "-") continue;
+							//		else incluyeAnioActual = true;
+							//	}
+							//	else
+							//	{
+							//		incluyeAnioActual = true;
+							//	}
+							//}
+							//else
+							//{
+							//	var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\d{4}");
+							//	if (matches.Count > 0)
+							//	{
+							//		var añosEncontrados = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
+							//		int anioMinimo = añosEncontrados.Min();
+							//		int anioMaximo = añosEncontrados.Max();
+							//		if (anioActual >= anioMinimo && anioActual <= anioMaximo) incluyeAnioActual = true;
+							//	}
+
+							//	if (!incluyeAnioActual && anioPredialStr != "Rezagos Anteriores")
+							//	{
+							//		resultadoFinal.RegistrosFallidos++;
+							//		resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El periodo de pago '{anioPredialStr}' de la cuenta {cuentaPredial} no incluye el ejercicio fiscal en curso ({anioActual}).");
+							//		continue;
+							//	}
+							//}
 
 							// 🚀 3. HOMOLOGACIÓN DE TIPO DE PREDIO
 							string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
@@ -337,7 +368,7 @@ namespace swCargaMasivaIngresos.Services
 							if (clasePago == "99" || string.IsNullOrWhiteSpace(clasePago))
 							{
 								// 1. Si el renglón tiene un año válido asignado explícitamente
-								if ((!string.IsNullOrWhiteSpace(anioPredialStr) && anioPredialStr != "-") || incluyeAnioActual)
+								if ((!string.IsNullOrWhiteSpace(anioPredialStr) && anioPredialStr != "-") )
 								{
 									clasePago = "1";
 								}
@@ -353,20 +384,35 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-							// 🚀 5. ASIGNACIONES FINALES (Flexibilidad de Fecha)
+							// 🚀 5. ASIGNACIONES FINALES (Flexibilidad de Fecha Histórica)
 							string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
 							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
 								claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
 
 							string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
 							if (string.IsNullOrWhiteSpace(fechaVigencia))
-								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+								fechaVigencia = new DateTime(anioFiscal, 12, 31).ToString("yyyy-MM-dd");
 							else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
 								fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
 							else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
 								fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
 							else
-								fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+								fechaVigencia = new DateTime(anioFiscal, 12, 31).ToString("yyyy-MM-dd");
+
+
+							//string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
+							//if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
+							//	claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
+
+							//string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
+							//if (string.IsNullOrWhiteSpace(fechaVigencia))
+							//	fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+							//else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
+							//	fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
+							//else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
+							//	fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
+							//else
+							//	fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
 
 							// 🚀 6. GENERACIÓN DE FILAS Y LA BARRERA DE RECHAZO
 							var bimestresMultiples = MapeadorInteligente.ExtraerBimestresMultiplesConMonto(fila, mapaBloqueado);

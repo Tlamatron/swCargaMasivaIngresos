@@ -102,9 +102,16 @@ namespace swCargaMasivaIngresos.Services
 						if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 						if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
 
-						string anioPredial = ExtraerSeguro(fila, mapaBloqueado, "Anio", "");
-						if (string.IsNullOrWhiteSpace(anioPredial)) anioPredial = DateTime.Now.Year.ToString();
-						if (anioPredial.Contains("2025") || anioPredial.Contains("2024") || anioPredial.Contains("2023") || anioPredial.Contains("2022") || anioPredial.Contains("2021")) continue;
+						// 🚀 NUEVA LÓGICA DE REZAGOS: Extraemos el año sin bloquearlo
+						string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "");
+						int anioFiscal = DateTime.Now.Year;
+
+						// Intentamos rescatar un año válido de la cadena (ej. "PAGO 2023")
+						var matchAnio = System.Text.RegularExpressions.Regex.Match(anioPredialStr, @"\b(19\d\d|20\d\d)\b");
+						if (matchAnio.Success)
+						{
+							anioFiscal = int.Parse(matchAnio.Value);
+						}
 
 						string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
 						if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
@@ -122,11 +129,12 @@ namespace swCargaMasivaIngresos.Services
 							claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
 						}
 
+						// 🚀 FECHAS DINÁMICAS HISTÓRICAS
 						string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
-						if (string.IsNullOrWhiteSpace(fechaVigencia)) fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+						if (string.IsNullOrWhiteSpace(fechaVigencia)) fechaVigencia = new DateTime(anioFiscal, 12, 31).ToString("yyyy-MM-dd");
 						else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/")) fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
 						else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada)) fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
-						else fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
+						else fechaVigencia = new DateTime(anioFiscal, 12, 31).ToString("yyyy-MM-dd");
 
 						DataRow nuevaFila = tablaCrudos.NewRow();
 						nuevaFila["ClaveMunicipio"] = claveMunicipio;
