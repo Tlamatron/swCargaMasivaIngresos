@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Web.UI.WebControls.WebParts;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -153,16 +154,46 @@ namespace swCargaMasivaIngresos.Services
 				// =======================================================================
 				// 🚀 REGLA D: Fallback Seguro de Municipio (Prevención Error 500)
 				// =======================================================================
-				// Intentamos convertirlo. Si falla, o si está fuera del rango poblano (1 a 217), forzamos el Fallback.
-				if (string.IsNullOrWhiteSpace(claveMun) ||
-					!short.TryParse(claveMun, out short numMpioEvaluado) ||
-					numMpioEvaluado < 1 || numMpioEvaluado > 217)
+				// Si desde el Front - End se indicó que esta carga es para un municipio destino,
+				// validamos que el Excel no traiga "errores de dedo" apuntando a otros municipios.
+				if (param != null && param.ClaveMunicipioDestino > 0)
 				{
-					if (param != null && param.ClaveMunicipioDestino > 0)
+					if (short.TryParse(claveMun, out short numMpioEvaluado))
 					{
-						claveMun = param.ClaveMunicipioDestino.ToString();
+						if (numMpioEvaluado != param.ClaveMunicipioDestino)
+						{
+							erroresFila.Add($"Invasión de jurisdicción: El archivo indica el municipio {numMpioEvaluado}, pero la carga corresponde al municipio {param.ClaveMunicipioDestino}.");
+						}
+					}
+					else if (string.IsNullOrWhiteSpace(claveMun))
+					{
+						// Si dejaron la celda en blanco
+						erroresFila.Add($"Falta la clave de municipio. Se esperaba la clave {param.ClaveMunicipioDestino}.");
 					}
 				}
+				else
+				{
+					// Si es una carga global (sin municipio destino), solo validamos que exista en el rango de Puebla (1 a 217).
+					if (string.IsNullOrWhiteSpace(claveMun) ||
+						!short.TryParse(claveMun, out short numMpioEvaluado) ||
+						numMpioEvaluado < 1 || numMpioEvaluado > 217)
+					{
+						erroresFila.Add($"Clave de municipio '{claveMun}' inválida. Debe estar entre 1 y 217.");
+					}
+				}
+
+
+
+				//// Intentamos convertirlo. Si falla, o si está fuera del rango poblano (1 a 217), forzamos el Fallback.
+				//if (string.IsNullOrWhiteSpace(claveMun) ||
+				//	!short.TryParse(claveMun, out short numMpioEvaluado) ||
+				//	numMpioEvaluado < 1 || numMpioEvaluado > 217)
+				//{
+				//	if (param != null && param.ClaveMunicipioDestino > 0)
+				//	{
+				//		claveMun = param.ClaveMunicipioDestino.ToString();
+				//	}
+				//}
 				//if (string.IsNullOrWhiteSpace(claveMun) || !short.TryParse(claveMun, out _))
 				//{
 				//	if (param.ClaveMunicipioDestino > 0) claveMun = param.ClaveMunicipioDestino.ToString();
