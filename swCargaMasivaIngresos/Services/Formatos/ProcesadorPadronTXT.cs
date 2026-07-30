@@ -80,16 +80,29 @@ namespace swCargaMasivaIngresos.Services
 					// ====================================================================
 
 					// Columna 1: Clave Municipio (Obligatorio, numérico de 1 a 217)
+					//if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
+					//{
+					//	// Fallback de seguridad (Opcional, pero recomendado en TXT también)
+					//	if (param.ClaveMunicipioDestino > 0)
+					//	{
+					//		claveMun = (short)param.ClaveMunicipioDestino;
+					//	}
+					//	else
+					//	{
+					//		MarcarError(resultado, numeroLinea, "Clave de municipio inválida (Debe ser numérico entre 1 y 217).");
+					//		continue;
+					//	}
+					//}
+					// Fallback Seguro de Municipio (Igual que en Padrón)
 					if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 					{
-						// Fallback de seguridad (Opcional, pero recomendado en TXT también)
 						if (param.ClaveMunicipioDestino > 0)
 						{
-							claveMun = (short)param.ClaveMunicipioDestino;
+							claveMun = (short)param.ClaveMunicipioDestino; // 🚀 CAST EXPLÍCITO APLICADO
 						}
 						else
 						{
-							MarcarError(resultado, numeroLinea, "Clave de municipio inválida (Debe ser numérico entre 1 y 217).");
+							MarcarError(resultado, numeroLinea, "Clave de municipio inválida (1 a 217).");
 							continue;
 						}
 					}

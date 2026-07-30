@@ -116,7 +116,7 @@ namespace swCargaMasivaIngresos.Services
 						string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
 						if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
 						else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
-						else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
+						else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB") || tipoPredio == "S-URB" || tipoPredio.Contains("-URB")) tipoPredio = "3";
 						if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
 						string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "99");

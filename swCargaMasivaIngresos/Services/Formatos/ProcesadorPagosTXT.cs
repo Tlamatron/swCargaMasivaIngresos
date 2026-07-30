@@ -97,11 +97,24 @@ namespace swCargaMasivaIngresos.Services
 					}
 
 					// Fallback Seguro de Municipio (Igual que en Padrón)
+					//if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
+					//{
+					//	if (param.ClaveMunicipioDestino > 0)
+					//	{
+					//		claveMun = (short)param.ClaveMunicipioDestino; // Cast explícito aplicado
+					//	}
+					//	else
+					//	{
+					//		MarcarError(resultado, numeroLinea, "Clave de municipio inválida (1 a 217).");
+					//		continue;
+					//	}
+					//}
+					// Fallback Seguro de Municipio (Igual que en Padrón)
 					if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 					{
 						if (param.ClaveMunicipioDestino > 0)
 						{
-							claveMun = (short)param.ClaveMunicipioDestino; // Cast explícito aplicado
+							claveMun = (short)param.ClaveMunicipioDestino; // 🚀 CAST EXPLÍCITO APLICADO
 						}
 						else
 						{

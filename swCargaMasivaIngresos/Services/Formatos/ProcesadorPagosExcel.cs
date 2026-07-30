@@ -240,50 +240,49 @@ namespace swCargaMasivaIngresos.Services
 							//bool incluyeAnioActual = false;
 							//int anioActual = DateTime.Now.Year;
 
-							//if (string.IsNullOrWhiteSpace(anioPredialStr))
-							//{
-							//	int colAnioActual = -1;
-							//	string anioActualStr = anioActual.ToString();
+								//if (string.IsNullOrWhiteSpace(anioPredialStr))
+								//{
+								//	int colAnioActual = -1;
+								//	string anioActualStr = anioActual.ToString();
 
-							//	foreach (var kvp in mapaCrudo)
-							//	{
-							//		if (kvp.Key.StartsWith(anioActualStr))
-							//		{
-							//			colAnioActual = kvp.Value;
-							//			break;
-							//		}
-							//	}
+								//	foreach (var kvp in mapaCrudo)
+								//	{
+								//		if (kvp.Key.StartsWith(anioActualStr))
+								//		{
+								//			colAnioActual = kvp.Value;
+								//			break;
+								//		}
+								//	}
 
-							//	if (colAnioActual != -1)
-							//	{
-							//		string valorAnioActual = fila[colAnioActual]?.ToString().Trim();
-							//		if (string.IsNullOrWhiteSpace(valorAnioActual) || valorAnioActual == "0" || valorAnioActual == "0.00" || valorAnioActual == "-") continue;
-							//		else incluyeAnioActual = true;
-							//	}
-							//	else
-							//	{
-							//		incluyeAnioActual = true;
-							//	}
-							//}
-							//else
-							//{
-							//	var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\d{4}");
-							//	if (matches.Count > 0)
-							//	{
-							//		var añosEncontrados = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
-							//		int anioMinimo = añosEncontrados.Min();
-							//		int anioMaximo = añosEncontrados.Max();
-							//		if (anioActual >= anioMinimo && anioActual <= anioMaximo) incluyeAnioActual = true;
-							//	}
+								//	if (colAnioActual != -1)
+								//	{
+								//		string valorAnioActual = fila[colAnioActual]?.ToString().Trim();
+								//		if (string.IsNullOrWhiteSpace(valorAnioActual) || valorAnioActual == "0" || valorAnioActual == "0.00" || valorAnioActual == "-") continue;
+								//		else incluyeAnioActual = true;
+								//	}
+								//	else
+								//	{
+								//		incluyeAnioActual = true;
+								//	}
+								//}
+								//else
+								//{
+								//	var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\d{4}");
+								//	if (matches.Count > 0)
+								//	{
+								//		var añosEncontrados = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
+								//		int anioMinimo = añosEncontrados.Min();
+								//		int anioMaximo = añosEncontrados.Max();
+								//		if (anioActual >= anioMinimo && anioActual <= anioMaximo) incluyeAnioActual = true;
+								//	}
 
-							//	if (!incluyeAnioActual && anioPredialStr != "Rezagos Anteriores")
-							//	{
-							//		resultadoFinal.RegistrosFallidos++;
-							//		resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El periodo de pago '{anioPredialStr}' de la cuenta {cuentaPredial} no incluye el ejercicio fiscal en curso ({anioActual}).");
-							//		continue;
-							//	}
-							//}
-
+								//	if (!incluyeAnioActual && anioPredialStr != "Rezagos Anteriores")
+								//	{
+								//		resultadoFinal.RegistrosFallidos++;
+								//		resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El periodo de pago '{anioPredialStr}' de la cuenta {cuentaPredial} no incluye el ejercicio fiscal en curso ({anioActual}).");
+								//		continue;
+								//	}
+								//}
 							// 🚀 3. HOMOLOGACIÓN DE TIPO DE PREDIO
 							string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = !string.IsNullOrWhiteSpace(tipoPredioHibrido) ? tipoPredioHibrido : tipoPredioInferido;
