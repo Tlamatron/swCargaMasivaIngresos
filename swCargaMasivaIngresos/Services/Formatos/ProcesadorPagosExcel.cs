@@ -289,7 +289,15 @@ namespace swCargaMasivaIngresos.Services
 
 							if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
 							else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
-							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB") || tipoPredio == "S-URB" || tipoPredio.Contains("-URB")) tipoPredio = "3";
+							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB") || tipoPredio == "S-URB" || tipoPredio.Contains("-URB") || tipoPredio == "S_URB" || tipoPredio.Contains("_URB")) tipoPredio = "3";
+
+							// 🛡️ FALLBACK DEFINITIVO: Si no es 1, 2 ni 3, confiamos en el membrete de la pestaña
+							if (tipoPredio != "1" && tipoPredio != "2" && tipoPredio != "3")
+							{
+								tipoPredio = tipoPredioInferido;
+								if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1"; // Último recurso absoluto
+							}
+
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
 							// =========================================================================
@@ -366,10 +374,13 @@ namespace swCargaMasivaIngresos.Services
 							// 💡 INFERENCIA D: El Default Inteligente
 							if (clasePago == "99" || string.IsNullOrWhiteSpace(clasePago))
 							{
-								// 1. Si el renglón tiene un año válido asignado explícitamente
-								if ((!string.IsNullOrWhiteSpace(anioPredialStr) && anioPredialStr != "-") )
+								// Verificamos si extrajimos un año directamente del nombre de alguna columna (ej. "2026")
+								bool encontroAnioEnEncabezado = mapaCrudo.Keys.Any(k => System.Text.RegularExpressions.Regex.IsMatch(k, @"\b(19|20)\d\d\b"));
+
+								// 1. Si el renglón tiene un año válido O si detectamos un año en las columnas
+								if ((!string.IsNullOrWhiteSpace(anioPredialStr) && anioPredialStr != "-") || encontroAnioEnEncabezado)
 								{
-									clasePago = "1";
+									clasePago = "1"; // Es Anual indiscutiblemente
 								}
 								// 2. Si vimos referencias bimestrales en el archivo
 								else if (archivoTienePagosBimestrales)

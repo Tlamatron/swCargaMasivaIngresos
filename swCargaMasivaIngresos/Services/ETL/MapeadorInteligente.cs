@@ -177,48 +177,47 @@ namespace swCargaMasivaIngresos.Services
 			}
 
 			// ==========================================================================================
-			// 3. ZONA C: Extracción Vertical con "Forward-Fill" (Idea del Arquitecto)
+			// 3. ZONA C: Extracción Vertical con "Forward-Fill" Seguro en Memoria
 			// Ya que sabemos dónde empieza (Zona A) y dónde termina (Zona B), 
-			// 1. Rellenamos hacia la derecha las celdas combinadas.
-			// 2. Fusionamos los textos de arriba hacia abajo.
+			// hacemos el arrastre horizontal y la fusión vertical sin modificar el DataTable original.
 			// ==========================================================================================
 
-			// 🚀 PASO 1: Forward-Fill Horizontal (Desagrupar y Duplicar Contexto)
+			var mapaCrudo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+			string[] titulosConstruidos = new string[tabla.Columns.Count]; // 🚀 Arreglo en memoria
+
 			for (int r = filaEncabezado; r < filaInicioDatos; r++)
 			{
-				string ultimoValorVisto = "";
+				string ultimoTituloHorizontal = "";
+
 				for (int c = 0; c < tabla.Columns.Count; c++)
 				{
-					string valorActual = tabla.Rows[r][c]?.ToString().Trim().ToUpper();
+					string valorCelda = tabla.Rows[r][c]?.ToString().Trim().ToUpper() ?? "";
 
-					if (!string.IsNullOrWhiteSpace(valorActual))
+					// 1. Relleno Horizontal (Forward-Fill)
+					if (!string.IsNullOrWhiteSpace(valorCelda))
 					{
-						ultimoValorVisto = valorActual; // Actualizamos la memoria
+						ultimoTituloHorizontal = valorCelda; // Actualizamos la memoria
 					}
-					else if (!string.IsNullOrWhiteSpace(ultimoValorVisto))
+
+					// 2. Aplanamiento Vertical (Concatenación)
+					if (!string.IsNullOrWhiteSpace(ultimoTituloHorizontal))
 					{
-						// Si la celda está vacía en la zona de títulos, asumimos que era una celda combinada
-						tabla.Rows[r][c] = ultimoValorVisto;
+						titulosConstruidos[c] = (titulosConstruidos[c] + " " + ultimoTituloHorizontal).Trim();
 					}
 				}
 			}
 
-			// 🚀 PASO 2: Aplanamiento Vertical (Concatenación)
-			var mapaCrudo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+			// 3. Asignación al Diccionario
 			for (int c = 0; c < tabla.Columns.Count; c++)
 			{
-				List<string> partes = new List<string>();
-				for (int r = filaEncabezado; r < filaInicioDatos; r++)
+				if (!string.IsNullOrWhiteSpace(titulosConstruidos[c]))
 				{
-					string val = tabla.Rows[r][c]?.ToString().Trim().ToUpper();
-					if (!string.IsNullOrWhiteSpace(val)) partes.Add(val);
-				}
-
-				if (partes.Count > 0)
-				{
-					// Unimos todo el contexto de arriba hacia abajo
-					string colName = string.Join(" ", partes).Replace("\r", " ").Replace("\n", " ").Replace("  ", " ");
-					if (!mapaCrudo.ContainsKey(colName)) mapaCrudo[colName] = c;
+					// Limpiamos dobles espacios generados por la concatenación
+					string colName = titulosConstruidos[c].Replace("\r", " ").Replace("\n", " ").Replace("  ", " ");
+					if (!mapaCrudo.ContainsKey(colName))
+					{
+						mapaCrudo[colName] = c;
+					}
 				}
 			}
 
@@ -612,31 +611,80 @@ namespace swCargaMasivaIngresos.Services
 			// 🚀 2. LAS COLUMNAS OBLIGATORIAS Y PRINCIPALES
 			Asignar("CuentaPredial", "CUENTA PREDIAL","NUMERO DE CUENTA", "NO. CUENTA", "CUENTA", "CTA", "CTA.", "CLAVE");
 			Asignar("Anio", "AÑO", "EJERCICIO", "EJERCICIO FISCAL");
-			//Asignar("ImpuestoDeterminado", "SALDO", "TOTAL", "PAGO", "IMPUESTO", "IMPORTE", "TOTAL.*BRUTO", "IMPUESTO.*TOTAL");
 			// Obtenemos el año en curso para blindarlo a futuro
 			string anioActual = DateTime.Now.Year.ToString();
+			
+			// =======================================================================
+			// 🧠 MOTOR DE INFERENCIA PONDERADA PARA IMPUESTO
+			// Evaluamos todas las columnas y elegimos a la ganadora según su "peso".
+			// =======================================================================
+			int mejorPuntajeImpuesto = -1;
+			int columnaGanadoraImpuesto = -1;
+			string nombreGanadorImpuesto = "";
 
-			Asignar("ImpuestoDeterminado",
-				// 🎯 1. FRANCOTIRADORES DE MÁXIMA PRIORIDAD (Año actual)
-				$"{anioActual}(BRUTO)",      // Atrapa a Cañada Morelos: "2026 (BRUTO)"
-				$"{anioActual}BRUTO",
-				$"TOTAL{anioActual}",        // Ej: "TOTAL 2026"
-				$"IMPUESTO{anioActual}",     // Ej: "IMPUESTO 2026"
-				anioActual.ToString(),       // 🛠️ FIX ZIHUATEUTLA: El puro año "2026" es el monto a cobrar
-											 // 🎯 2. FRANCOTIRADORES SEMÁNTICOS (Palabras contundentes)
-				"ACTUAL",                    // Ej: "IMPUESTO ACTUAL", "COBRO ACTUAL"
-				"NETO",                      // Ej: "IMPORTE COBRADO (NETO)"
-				"IMPUESTODETERMINADO",       // Nombre oficial perfecto
+			foreach (var kvp in mapaCrudo)
+			{
+				if (columnasUsadas.Contains(kvp.Value)) continue; // Ignorar columnas ya asignadas
 
-				// 🎯 3. PALABRAS ESTÁNDAR (El 90% de los municipios)
-				"IMPUESTO",
-				"IMPORTE",
-				"PAGO",
+				string colNormalizada = kvp.Key.Replace(" ", "").ToUpper();
+				int puntajeActual = 0;
 
-				// 🎯 4. ÚLTIMO RECURSO (Genéricos peligrosos)
-				"SALDO",
-				"TOTAL"
-			);
+				// 🏆 REGLA 1: Máxima Prioridad [100 puntos] (Combina Año y Total/Bruto)
+				// Cubre: "2026 (BRUTO)", "TOTAL 2026", "IMPUESTO 2026"
+				if (colNormalizada.Contains($"{anioActual}BRUTO") ||
+					colNormalizada.Contains($"TOTAL{anioActual}") ||
+					colNormalizada.Contains($"IMPUESTO{anioActual}"))
+				{
+					puntajeActual = 100;
+				}
+				// 🥇 REGLA 2: Totales Absolutos [90 puntos] (Suma final, incluye rezagos)
+				// Cubre: "TOTAL", "TOTALES"
+				else if (colNormalizada == "TOTAL" || colNormalizada == "TOTALES" || colNormalizada.EndsWith("TOTAL"))
+				{
+					puntajeActual = 90;
+				}
+				// 🥈 REGLA 3: Nombres Oficiales y Semánticos Fuertes [80 puntos]
+				// Cubre: "IMPUESTO DETERMINADO", "NETO", "ACTUAL"
+				else if (colNormalizada == "IMPUESTODETERMINADO" || colNormalizada == "NETO" || colNormalizada == "ACTUAL")
+				{
+					puntajeActual = 80;
+				}
+				// 🥉 REGLA 4: Palabras Estándar [70 puntos]
+				// Cubre: "IMPUESTO", "IMPORTE", "PAGO"
+				else if (colNormalizada == "IMPUESTO" || colNormalizada == "IMPORTE" || colNormalizada == "PAGO")
+				{
+					puntajeActual = 70;
+				}
+				// ⚠️ REGLA 5: El Año Suelto [60 puntos] 
+				// Cubre: "2026" (Gana solo si no existen las columnas TOTAL, IMPUESTO, etc.)
+				else if (colNormalizada == anioActual)
+				{
+					puntajeActual = 60;
+				}
+				// 🚨 REGLA 6: Último Recurso [50 puntos]
+				// Cubre: "SALDO"
+				else if (colNormalizada == "SALDO")
+				{
+					puntajeActual = 50;
+				}
+
+				// Evaluar si esta columna tiene mejor puntaje que las anteriores
+				if (puntajeActual > mejorPuntajeImpuesto)
+				{
+					mejorPuntajeImpuesto = puntajeActual;
+					columnaGanadoraImpuesto = kvp.Value;
+					nombreGanadorImpuesto = kvp.Key;
+				}
+			}
+
+			// Consagración de la columna ganadora
+			if (columnaGanadoraImpuesto != -1)
+			{
+				oficial.Columnas["ImpuestoDeterminado"] = columnaGanadoraImpuesto;
+				columnasUsadas.Add(columnaGanadoraImpuesto); // Bloqueamos la columna
+				LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Mapeador", $"[TRACE] Impuesto asignado a '{nombreGanadorImpuesto}' con {mejorPuntajeImpuesto} puntos.").Wait();
+			}
+
 
 			Asignar("FechaVigencia", "FECHA", "VIGENCIA");
 			Asignar("BaseGravable", "BASE GRAVABLE", "BASE", "VALOR CATASTRAL", "VALOR");

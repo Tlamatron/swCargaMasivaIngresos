@@ -171,34 +171,6 @@ namespace swCargaMasivaIngresos.Services
 					}
 				}
 
-
-
-				//// Intentamos convertirlo. Si falla, o si está fuera del rango poblano (1 a 217), forzamos el Fallback.
-				//if (string.IsNullOrWhiteSpace(claveMun) ||
-				//	!short.TryParse(claveMun, out short numMpioEvaluado) ||
-				//	numMpioEvaluado < 1 || numMpioEvaluado > 217)
-				//{
-				//	if (param != null && param.ClaveMunicipioDestino > 0)
-				//	{
-				//		claveMun = param.ClaveMunicipioDestino.ToString();
-				//	}
-				//}
-				//if (string.IsNullOrWhiteSpace(claveMun) || !short.TryParse(claveMun, out _))
-				//{
-				//	if (param.ClaveMunicipioDestino > 0) claveMun = param.ClaveMunicipioDestino.ToString();
-				//}
-
-				// =======================================================================
-				// 🚀 REGLA E: Blindaje Contable de Bimestres
-				// =======================================================================
-				//if (!string.IsNullOrWhiteSpace(bimestre) && bimestre.Contains(","))
-				//{
-				//	bimestre = bimestre.Split(',').Last().Trim(); // "1,2,3" -> "3"
-				//}
-				//if (clasePago == "1" || string.IsNullOrWhiteSpace(bimestre))
-				//{
-				//	bimestre = "0"; // Regla SQL: Si es Anual, el bimestre es 0
-				//}
 				if (!string.IsNullOrWhiteSpace(bimestre) && bimestre.Contains(","))
 				{
 					bimestre = bimestre.Split(',').Last().Trim(); // "1,2,3" -> "3"
