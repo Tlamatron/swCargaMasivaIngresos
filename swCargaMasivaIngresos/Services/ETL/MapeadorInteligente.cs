@@ -177,9 +177,33 @@ namespace swCargaMasivaIngresos.Services
 			}
 
 			// ==========================================================================================
-			// 3. ZONA C: Extracción Vertical (Fusión de la Caja)
-			// Ya que sabemos dónde empieza (Zona A) y dónde termina (Zona B), fusionamos los textos de arriba hacia abajo.
+			// 3. ZONA C: Extracción Vertical con "Forward-Fill" (Idea del Arquitecto)
+			// Ya que sabemos dónde empieza (Zona A) y dónde termina (Zona B), 
+			// 1. Rellenamos hacia la derecha las celdas combinadas.
+			// 2. Fusionamos los textos de arriba hacia abajo.
 			// ==========================================================================================
+
+			// 🚀 PASO 1: Forward-Fill Horizontal (Desagrupar y Duplicar Contexto)
+			for (int r = filaEncabezado; r < filaInicioDatos; r++)
+			{
+				string ultimoValorVisto = "";
+				for (int c = 0; c < tabla.Columns.Count; c++)
+				{
+					string valorActual = tabla.Rows[r][c]?.ToString().Trim().ToUpper();
+
+					if (!string.IsNullOrWhiteSpace(valorActual))
+					{
+						ultimoValorVisto = valorActual; // Actualizamos la memoria
+					}
+					else if (!string.IsNullOrWhiteSpace(ultimoValorVisto))
+					{
+						// Si la celda está vacía en la zona de títulos, asumimos que era una celda combinada
+						tabla.Rows[r][c] = ultimoValorVisto;
+					}
+				}
+			}
+
+			// 🚀 PASO 2: Aplanamiento Vertical (Concatenación)
 			var mapaCrudo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 			for (int c = 0; c < tabla.Columns.Count; c++)
 			{
@@ -192,6 +216,7 @@ namespace swCargaMasivaIngresos.Services
 
 				if (partes.Count > 0)
 				{
+					// Unimos todo el contexto de arriba hacia abajo
 					string colName = string.Join(" ", partes).Replace("\r", " ").Replace("\n", " ").Replace("  ", " ");
 					if (!mapaCrudo.ContainsKey(colName)) mapaCrudo[colName] = c;
 				}
