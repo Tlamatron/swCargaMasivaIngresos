@@ -234,55 +234,6 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-
-
-							//string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "").ToUpper().Trim();
-							//bool incluyeAnioActual = false;
-							//int anioActual = DateTime.Now.Year;
-
-								//if (string.IsNullOrWhiteSpace(anioPredialStr))
-								//{
-								//	int colAnioActual = -1;
-								//	string anioActualStr = anioActual.ToString();
-
-								//	foreach (var kvp in mapaCrudo)
-								//	{
-								//		if (kvp.Key.StartsWith(anioActualStr))
-								//		{
-								//			colAnioActual = kvp.Value;
-								//			break;
-								//		}
-								//	}
-
-								//	if (colAnioActual != -1)
-								//	{
-								//		string valorAnioActual = fila[colAnioActual]?.ToString().Trim();
-								//		if (string.IsNullOrWhiteSpace(valorAnioActual) || valorAnioActual == "0" || valorAnioActual == "0.00" || valorAnioActual == "-") continue;
-								//		else incluyeAnioActual = true;
-								//	}
-								//	else
-								//	{
-								//		incluyeAnioActual = true;
-								//	}
-								//}
-								//else
-								//{
-								//	var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\d{4}");
-								//	if (matches.Count > 0)
-								//	{
-								//		var añosEncontrados = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
-								//		int anioMinimo = añosEncontrados.Min();
-								//		int anioMaximo = añosEncontrados.Max();
-								//		if (anioActual >= anioMinimo && anioActual <= anioMaximo) incluyeAnioActual = true;
-								//	}
-
-								//	if (!incluyeAnioActual && anioPredialStr != "Rezagos Anteriores")
-								//	{
-								//		resultadoFinal.RegistrosFallidos++;
-								//		resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: El periodo de pago '{anioPredialStr}' de la cuenta {cuentaPredial} no incluye el ejercicio fiscal en curso ({anioActual}).");
-								//		continue;
-								//	}
-								//}
 							// 🚀 3. HOMOLOGACIÓN DE TIPO DE PREDIO
 							string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = !string.IsNullOrWhiteSpace(tipoPredioHibrido) ? tipoPredioHibrido : tipoPredioInferido;
@@ -409,23 +360,10 @@ namespace swCargaMasivaIngresos.Services
 							else
 								fechaVigencia = new DateTime(anioFiscal, 12, 31).ToString("yyyy-MM-dd");
 
-
-							//string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
-							//if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
-							//	claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
-
-							//string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
-							//if (string.IsNullOrWhiteSpace(fechaVigencia))
-							//	fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
-							//else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/"))
-							//	fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
-							//else if (DateTime.TryParse(fechaVigencia, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
-							//	fechaVigencia = fechaParseada.ToString("yyyy-MM-dd");
-							//else
-							//	fechaVigencia = DateTime.Now.ToString("yyyy-MM-dd");
-
 							// 🚀 6. GENERACIÓN DE FILAS Y LA BARRERA DE RECHAZO
 							var bimestresMultiples = MapeadorInteligente.ExtraerBimestresMultiplesConMonto(fila, mapaBloqueado);
+
+							int folEmi = 0;
 
 							if (bimestresMultiples.Count > 0)
 							{
@@ -446,7 +384,7 @@ namespace swCargaMasivaIngresos.Services
 									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "IdControl", ""), out int idCtrl)) nuevaFila["IdControl"] = idCtrl;
 									else nuevaFila["IdControl"] = DBNull.Value;
 
-									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", ""), out int folEmi)) nuevaFila["FolioEmision"] = folEmi;
+									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", ""), out folEmi)) nuevaFila["FolioEmision"] = folEmi;
 									else nuevaFila["FolioEmision"] = DBNull.Value;
 
 									tablaCrudos.Rows.Add(nuevaFila);
@@ -465,24 +403,29 @@ namespace swCargaMasivaIngresos.Services
 
 								if (clasePago == "1" && anioPredialStr == "-") continue;
 
-								// 🛑 BARRERA 1: Sin contexto en absoluto (Solo se dispara si fallan las deducciones inteligentes)
-								if (clasePago == "99")
+								// 🚀 NUEVO: Extraemos llaves de cruce exacto ANTES de las barreras
+								string idControlStr = ExtraerSeguro(fila, mapaBloqueado, "IdControl", "");
+								string folioEmisionStr = ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", "");
+								bool tieneLlavesExactas = int.TryParse(idControlStr, out int idCtrl) && int.TryParse(folioEmisionStr, out folEmi);
+
+								// 🛑 BARRERA 1: Sin contexto en absoluto (Se perdona si hay llaves exactas)
+								if (clasePago == "99" && !tieneLlavesExactas)
 								{
 									resultadoFinal.RegistrosFallidos++;
-									resultadoFinal.ErroresDetalle.Add($"Fila {i + 1} (Cuenta {cuentaPredial}): Rechazado. No se encontró ninguna referencia en el archivo ni en la fila para determinar si el pago es Anual o Bimestral.");
+									resultadoFinal.ErroresDetalle.Add($"Fila {i + 1} (Cuenta {cuentaPredial}): Rechazado. No se encontró referencia de Anual/Bimestral, ni trae IdControl/Folio para cruce exacto.");
 									continue;
 								}
 
-								// 🛑 BARRERA 2: Contradicción Anual
-								if (clasePago == "1" && (bimestre != "0" && bimestre != "99"))
+								// 🛑 BARRERA 2: Contradicción Anual (Se perdona si hay llaves exactas)
+								if (clasePago == "1" && (bimestre != "0" && bimestre != "99") && !tieneLlavesExactas)
 								{
 									resultadoFinal.RegistrosFallidos++;
 									resultadoFinal.ErroresDetalle.Add($"Fila {i + 1} (Cuenta {cuentaPredial}): Contradicción detectada. El pago es Anual, pero tiene asignado el bimestre {bimestre}.");
 									continue;
 								}
 
-								// 🛑 BARRERA 3: Contradicción Bimestral
-								if (clasePago == "2" && (bimestre == "0" || bimestre == "99"))
+								// 🛑 BARRERA 3: Contradicción Bimestral (Se perdona si hay llaves exactas)
+								if (clasePago == "2" && (bimestre == "0" || bimestre == "99") && !tieneLlavesExactas)
 								{
 									resultadoFinal.RegistrosFallidos++;
 									resultadoFinal.ErroresDetalle.Add($"Fila {i + 1} (Cuenta {cuentaPredial}): Pago Bimestral sin periodo especificado. El sistema no sabría qué bimestre consolidar.");
@@ -504,8 +447,19 @@ namespace swCargaMasivaIngresos.Services
 
 								nuevaFila["FechaVigencia"] = fechaVigencia;
 								nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
-								nuevaFila["IdControl"] = DBNull.Value;
-								nuevaFila["FolioEmision"] = DBNull.Value;
+
+								// Asignamos las llaves si existieron
+								if (tieneLlavesExactas)
+								{
+									nuevaFila["IdControl"] = idCtrl;
+									nuevaFila["FolioEmision"] = folEmi;
+								}
+								else
+								{
+									nuevaFila["IdControl"] = DBNull.Value;
+									nuevaFila["FolioEmision"] = DBNull.Value;
+								}
+
 								tablaCrudos.Rows.Add(nuevaFila);
 							}
 						}
