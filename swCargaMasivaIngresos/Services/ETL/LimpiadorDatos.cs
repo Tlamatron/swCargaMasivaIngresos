@@ -140,29 +140,38 @@ namespace swCargaMasivaIngresos.Services
 						else if (pestañaMayus.Contains("JUNIO")) fechaStr = $"01/06/{anioInferencia}";
 					}
 				}
-					// =======================================================================
-					// 🚀 REGLA D: Fallback Seguro de Municipio (Prevención Error 500)
-					// =======================================================================
-					// Si desde el Front - End se indicó que esta carga es para un municipio destino,
-					// validamos que el Excel no traiga "errores de dedo" apuntando a otros municipios.
-					if (param != null && param.ClaveMunicipioDestino > 0)
+				// =======================================================================
+				// 🚀 REGLA D: Fallback Seguro de Municipio (Auto-Corrección)
+				// =======================================================================
+				if (param != null && param.ClaveMunicipioDestino > 0)
 				{
 					if (short.TryParse(claveMun, out short numMpioEvaluado))
 					{
+						// Es un número. ¿Es diferente al destino que indica el Front-End?
 						if (numMpioEvaluado != param.ClaveMunicipioDestino)
 						{
-							erroresFila.Add($"Invasión de jurisdicción: El archivo indica el municipio {numMpioEvaluado}, pero la carga corresponde al municipio {param.ClaveMunicipioDestino}.");
+							// Si está en el rango de Puebla (1 a 217), es una invasión real (subió el Excel equivocado)
+							if (numMpioEvaluado >= 1 && numMpioEvaluado <= 217)
+							{
+								erroresFila.Add($"Invasión de jurisdicción: El archivo indica el municipio {numMpioEvaluado}, pero la carga corresponde al municipio {param.ClaveMunicipioDestino}.");
+							}
+							else
+							{
+								// Es un número fuera de rango (ej. 999). Hacemos auto-corrección.
+								claveMun = param.ClaveMunicipioDestino.ToString();
+							}
 						}
 					}
-					else if (string.IsNullOrWhiteSpace(claveMun))
+					else
 					{
-						// Si dejaron la celda en blanco
-						erroresFila.Add($"Falta la clave de municipio. Se esperaba la clave {param.ClaveMunicipioDestino}.");
+						// No es un número (está en blanco, o dice algo como "CUAYUCA" o "MPIO 43")
+						// 🚀 Forzamos el Fallback al valor del Front-End silenciosamente
+						claveMun = param.ClaveMunicipioDestino.ToString();
 					}
 				}
 				else
 				{
-					// Si es una carga global (sin municipio destino), solo validamos que exista en el rango de Puebla (1 a 217).
+					// Si es una carga global (sin municipio destino desde la UI), exigimos que el Excel venga perfecto.
 					if (string.IsNullOrWhiteSpace(claveMun) ||
 						!short.TryParse(claveMun, out short numMpioEvaluado) ||
 						numMpioEvaluado < 1 || numMpioEvaluado > 217)
