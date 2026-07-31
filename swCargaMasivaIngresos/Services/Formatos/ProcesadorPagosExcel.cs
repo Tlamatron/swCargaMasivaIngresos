@@ -364,6 +364,7 @@ namespace swCargaMasivaIngresos.Services
 							var bimestresMultiples = MapeadorInteligente.ExtraerBimestresMultiplesConMonto(fila, mapaBloqueado);
 
 							int folEmi = 0;
+							int idCtrl = 0;
 
 							if (bimestresMultiples.Count > 0)
 							{
@@ -381,7 +382,7 @@ namespace swCargaMasivaIngresos.Services
 									nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
 
 									// Lees el valor crudo o dejas nulo si falla
-									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "IdControl", ""), out int idCtrl)) nuevaFila["IdControl"] = idCtrl;
+									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "IdControl", ""), out idCtrl)) nuevaFila["IdControl"] = idCtrl;
 									else nuevaFila["IdControl"] = DBNull.Value;
 
 									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", ""), out folEmi)) nuevaFila["FolioEmision"] = folEmi;
@@ -404,9 +405,14 @@ namespace swCargaMasivaIngresos.Services
 								if (clasePago == "1" && anioPredialStr == "-") continue;
 
 								// 🚀 NUEVO: Extraemos llaves de cruce exacto ANTES de las barreras
-								string idControlStr = ExtraerSeguro(fila, mapaBloqueado, "IdControl", "");
-								string folioEmisionStr = ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", "");
-								bool tieneLlavesExactas = int.TryParse(idControlStr, out int idCtrl) && int.TryParse(folioEmisionStr, out folEmi);
+								string idControlStr = ExtraerSeguro(fila, mapaBloqueado, "IdControl", "").Replace(",", "").Trim();
+								string folioEmisionStr = ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", "").Replace(",", "").Trim();
+								
+								// Extraemos como double por si ExcelDataReader lo mandó con decimales ocultos (ej. "51917.0")
+								if (double.TryParse(idControlStr, out double valCtrl)) idCtrl = (int)valCtrl;
+								if (double.TryParse(folioEmisionStr, out double valFol)) folEmi = (int)valFol;
+
+								bool tieneLlavesExactas = (idCtrl > 0 && folEmi > 0);
 
 								// 🛑 BARRERA 1: Sin contexto en absoluto (Se perdona si hay llaves exactas)
 								if (clasePago == "99" && !tieneLlavesExactas)

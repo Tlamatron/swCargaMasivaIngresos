@@ -669,7 +669,7 @@ namespace swCargaMasivaIngresos.Services
 				}
 
 				// Evaluar si esta columna tiene mejor puntaje que las anteriores
-				if (puntajeActual > mejorPuntajeImpuesto)
+				if (puntajeActual > mejorPuntajeImpuesto && puntajeActual > 0)
 				{
 					mejorPuntajeImpuesto = puntajeActual;
 					columnaGanadoraImpuesto = kvp.Value;
