@@ -474,6 +474,17 @@ namespace swCargaMasivaIngresos.Services
 
 								if (clasePago == "1" && anioPredialStr == "-") continue;
 
+								// Extraemos llaves de cruce exacto ANTES de las barreras
+								int folEmi = 0;
+								string idControlStr = ExtraerSeguro(fila, mapaBloqueado, "IdControl", "").Replace(",", "").Trim();
+								string folioEmisionStr = ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", "").Replace(",", "").Trim();
+								int idCtrl = 0;
+
+								if (double.TryParse(idControlStr, out double valCtrl)) idCtrl = (int)valCtrl;
+								if (double.TryParse(folioEmisionStr, out double valFol)) folEmi = (int)valFol;
+
+								bool tieneLlavesExactas = (idCtrl > 0 && folEmi > 0);
+
 								// 🛑 BARRERA 1: Sin contexto en absoluto (Se perdona si hay llaves exactas)
 								if (clasePago == "99" && !tieneLlavesExactas)
 								{
@@ -498,26 +509,75 @@ namespace swCargaMasivaIngresos.Services
 									continue;
 								}
 
-								DataRow nuevaFila = tablaCrudos.NewRow();
-								nuevaFila["ClaveMunicipio"] = claveMunicipio;
-								nuevaFila["TipoPredio"] = tipoPredio;
-								nuevaFila["CuentaPredial"] = cuentaPredial;
-								nuevaFila["ClasePago"] = clasePago;
-								nuevaFila["Bimestre"] = bimestre;
-
 								string impuestoStr = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0").Trim();
 								impuestoStr = impuestoStr.Replace("$", "").Replace(",", "").Trim();
+								decimal impuestoTotal = 0m;
+								decimal.TryParse(impuestoStr, out impuestoTotal);
 
-								if (decimal.TryParse(impuestoStr, out decimal impuestoDecimal)) nuevaFila["ImpuestoDeterminado"] = impuestoDecimal;
-								else nuevaFila["ImpuestoDeterminado"] = 0m;
+								decimal impuestoAsignado;
 
-								nuevaFila["FechaVigencia"] = fechaVigencia;
-								nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
+								// 🚀 NUEVA REGLA DE NEGOCIO: Control Estricto de Rangos
+								if (aniosVerticales.Count > 1)
+								{
+									// Si es un rango (ej. 2022 AL 2025), mandamos el monto en 0. 
+									// SQL respetará el monto original de la deuda y solo marcará el registro como pagado.
+									impuestoAsignado = 0m;
 
-								if (tieneLlavesExactas) { nuevaFila["IdControl"] = idCtrl; nuevaFila["FolioEmision"] = folEmi; }
-								else { nuevaFila["IdControl"] = DBNull.Value; nuevaFila["FolioEmision"] = DBNull.Value; }
+									// Forzamos por default que sea Anual
+									clasePago = "1";
+									bimestre = "0";
+								}
+								else
+								{
+									// Si es un solo año, mandamos el importe tal cual viene en el Excel
+									impuestoAsignado = impuestoTotal;
+								}
 
-								tablaCrudos.Rows.Add(nuevaFila);
+								// 🚀 BUCLE MAESTRO: Generamos una fila por cada año del rango
+								foreach (int anioReportado in aniosVerticales)
+								{
+									DataRow nuevaFila = tablaCrudos.NewRow();
+									nuevaFila["ClaveMunicipio"] = claveMunicipio;
+									nuevaFila["TipoPredio"] = tipoPredio;
+									nuevaFila["CuentaPredial"] = cuentaPredial;
+									nuevaFila["ClasePago"] = clasePago;
+									nuevaFila["Bimestre"] = bimestre;
+									nuevaFila["ImpuestoDeterminado"] = impuestoAsignado; // Aplicamos el monto según la regla
+
+									// 🚀 AJUSTE DINÁMICO DE FECHA PARA ENGAÑAR A SQL Y ACOMODAR EL AÑO
+									string fechaVigOriginal = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
+									string fechaVigAjustada;
+
+									if (string.IsNullOrWhiteSpace(fechaVigOriginal))
+									{
+										fechaVigAjustada = new DateTime(anioReportado, 12, 31).ToString("yyyy-MM-dd");
+									}
+									else if (double.TryParse(fechaVigOriginal, out double diasExcel) && diasExcel > 10000 && !fechaVigOriginal.Contains("-") && !fechaVigOriginal.Contains("/"))
+									{
+										var dtOrig = DateTime.FromOADate(diasExcel);
+										int m = dtOrig.Month; int d = dtOrig.Day;
+										if (m == 2 && d == 29 && !DateTime.IsLeapYear(anioReportado)) d = 28; // Salvar bisiestos
+										fechaVigAjustada = new DateTime(anioReportado, m, d).ToString("yyyy-MM-dd");
+									}
+									else if (DateTime.TryParse(fechaVigOriginal, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
+									{
+										int m = fechaParseada.Month; int d = fechaParseada.Day;
+										if (m == 2 && d == 29 && !DateTime.IsLeapYear(anioReportado)) d = 28;
+										fechaVigAjustada = new DateTime(anioReportado, m, d).ToString("yyyy-MM-dd");
+									}
+									else
+									{
+										fechaVigAjustada = new DateTime(anioReportado, 12, 31).ToString("yyyy-MM-dd");
+									}
+
+									nuevaFila["FechaVigencia"] = fechaVigAjustada;
+									nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
+
+									if (tieneLlavesExactas) { nuevaFila["IdControl"] = idCtrl; nuevaFila["FolioEmision"] = folEmi; }
+									else { nuevaFila["IdControl"] = DBNull.Value; nuevaFila["FolioEmision"] = DBNull.Value; }
+
+									tablaCrudos.Rows.Add(nuevaFila);
+								}
 							}
 						}
 
