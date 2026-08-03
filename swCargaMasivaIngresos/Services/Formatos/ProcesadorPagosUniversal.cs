@@ -24,8 +24,6 @@ namespace swCargaMasivaIngresos.Services
 		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
-
-			// Aseguramos tener la extensión
 			string extension = System.IO.Path.GetExtension(rutaArchivo);
 
 			LogService.WriteLogAsync("WARN", param.UsuarioLogin, "ProcesadorPagosUniversal", $"[TRACE] Iniciando lectura inteligente. Folio: {param.FolioCarga}").Wait();
@@ -44,24 +42,61 @@ namespace swCargaMasivaIngresos.Services
 
 					var mapaCrudo = MapeadorInteligente.ObtenerMapaPorRegiones(hoja.TablaCruda, out int filaInicioDatos);
 
-					//if (mapaCrudo.Count == 0)
-					//{
-					//	resultadoFinal.ErroresDetalle.Add($"No se encontraron encabezados válidos en la pestaña: {hoja.ContextoPestaña}");
-					//	continue;
-					//}
+					// ==============================================================================
+					// 🚀 INFERENCIA DE CONTEXTO DESDE EL NOMBRE DEL ARCHIVO (Caso Oriental)
+					// ==============================================================================
+					string contextoUpper = hoja.ContextoPestaña.ToUpper();
+					string clasePagoInferida = "99";
+					string bimestreInferido = "99";
+					string tipoPredioInferido = "";
+
+					if (contextoUpper.Contains("ANUAL"))
+					{
+						clasePagoInferida = "1";
+						bimestreInferido = "0";
+					}
+					else if (contextoUpper.Contains("BIMESTRE") || contextoUpper.Contains("BIM"))
+					{
+						clasePagoInferida = "2";
+						for (int b = 1; b <= 6; b++)
+						{
+							if (contextoUpper.Contains($"{b}BIMESTRE") || contextoUpper.Contains($"BIMESTRE {b}") || contextoUpper.Contains($"BIMESTRE{b}") || contextoUpper.StartsWith($"{b}"))
+							{
+								bimestreInferido = b.ToString();
+								break;
+							}
+						}
+					}
+
+					if (contextoUpper.Contains("URBANO") && !contextoUpper.Contains("SUB")) tipoPredioInferido = "1";
+					else if (contextoUpper.Contains("RUSTICO") || contextoUpper.Contains("RÚSTICO")) tipoPredioInferido = "2";
+					else if (contextoUpper.Contains("SUB-URBANO") || contextoUpper.Contains("SUBURBANO") || contextoUpper.Contains("SUB")) tipoPredioInferido = "3";
+
+					// ==============================================================================
+					// 🚀 PRE-ESCANEO DE ESTATUS (Filtro Inteligente de Oriental)
+					// ==============================================================================
+					bool archivoUsaBanderaPagado = false;
+					foreach (DataRow r in hoja.TablaCruda.Rows)
+					{
+						if (r.ItemArray.Any(x => x?.ToString().Trim().ToUpper() == "PAGADO"))
+						{
+							archivoUsaBanderaPagado = true;
+							break;
+						}
+					}
+
 					if (mapaCrudo.Count == 0)
 					{
-						// 🚀 PLAN B: Detección de Archivo Crudo sin Encabezados (Layout estricto)
+						// PLAN B: Detección de Archivo Crudo sin Encabezados (Layout estricto)
 						if (hoja.TablaCruda.Columns.Count >= 5 && hoja.TablaCruda.Rows.Count > 0)
 						{
 							var primeraFila = hoja.TablaCruda.Rows[0];
 							int celdasNumericas = primeraFila.ItemArray.Take(5).Count(x => decimal.TryParse(x?.ToString(), out _));
 
-							if (celdasNumericas >= 3) // Si la mayoría de las primeras 5 columnas son números
+							if (celdasNumericas >= 3)
 							{
 								LogService.WriteLogAsync("WARN", param.UsuarioLogin, "ProcesadorPagosUniversal", $"[TRACE] Aplicando Plan B (Mapeo Fijo Sin Encabezados) para pestaña {hoja.ContextoPestaña}").Wait();
 
-								// Forzamos el mapa crudo con nombres oficiales para que el procesador no falle
 								mapaCrudo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
 								{
 									{ "CLAVE DEL MUNICIPIO", 0 },
@@ -71,17 +106,15 @@ namespace swCargaMasivaIngresos.Services
 									{ "BIMESTRE", 4 }
 								};
 
-								// Si casualmente mandaron una 6ta columna con el monto, lo mapeamos
 								if (hoja.TablaCruda.Columns.Count >= 6 && decimal.TryParse(primeraFila.ItemArray[5]?.ToString(), out _))
 								{
 									mapaCrudo.Add("IMPUESTO DETERMINADO", 5);
 								}
 
-								filaInicioDatos = 0; // Obligamos a empezar la extracción desde la línea cero
+								filaInicioDatos = 0;
 							}
 						}
 
-						// Si después del intento de rescate sigue vacío, ahora sí lo rechazamos
 						if (mapaCrudo.Count == 0)
 						{
 							resultadoFinal.ErroresDetalle.Add($"No se encontraron encabezados válidos en la pestaña: {hoja.ContextoPestaña}. El archivo no cumple con el formato.");
@@ -97,31 +130,52 @@ namespace swCargaMasivaIngresos.Services
 						var fila = hoja.TablaCruda.Rows[i];
 						if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 
-						// --- EXTRACCIÓN SEGURA ---
+						// 🚀 REGLA ORIENTAL: Filtro Inteligente de Pagados
+						if (archivoUsaBanderaPagado)
+						{
+							bool filaEstaPagada = fila.ItemArray.Any(x => x?.ToString().Trim().ToUpper() == "PAGADO");
+							if (!filaEstaPagada) continue;
+						}
+
 						string cuentaPredial = ExtraerSeguro(fila, mapaBloqueado, "CuentaPredial", "");
 						if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 						if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
 
-						// 🚀 NUEVA LÓGICA DE REZAGOS: Extraemos el año sin bloquearlo
 						string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "");
 						int anioFiscal = DateTime.Now.Year;
 
-						// Intentamos rescatar un año válido de la cadena (ej. "PAGO 2023")
 						var matchAnio = System.Text.RegularExpressions.Regex.Match(anioPredialStr, @"\b(19\d\d|20\d\d)\b");
 						if (matchAnio.Success)
 						{
 							anioFiscal = int.Parse(matchAnio.Value);
 						}
 
+						// 🚀 CASCADA DE INFERENCIA ENRIQUECIDA
 						string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
+						if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = tipoPredioInferido;
 						if (tipoPredio == "U" || tipoPredio.StartsWith("URBANO")) tipoPredio = "1";
 						else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
 						else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB") || tipoPredio == "S-URB" || tipoPredio.Contains("-URB") || tipoPredio == "S_URB" || tipoPredio.Contains("_URB")) tipoPredio = "3";
-						if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
+						if (string.IsNullOrWhiteSpace(tipoPredio) || (tipoPredio != "1" && tipoPredio != "2" && tipoPredio != "3")) tipoPredio = "1";
 
 						string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "99");
+						if (!string.IsNullOrWhiteSpace(clasePago) && clasePago != "99")
+						{
+							string cpUpper = clasePago.ToUpper();
+							if (cpUpper == "ANUAL" || cpUpper == "A" || cpUpper.Contains("ANUAL")) clasePago = "1";
+							else if (cpUpper == "BIMESTRAL" || cpUpper == "B" || cpUpper.StartsWith("BIM")) clasePago = "2";
+						}
+						if (string.IsNullOrWhiteSpace(clasePago) || clasePago == "99") clasePago = clasePagoInferida;
+
 						string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
-						if (string.IsNullOrWhiteSpace(bimestre)) bimestre = "99";
+						if (string.IsNullOrWhiteSpace(bimestre) || bimestre == "99") bimestre = bimestreInferido;
+
+						// 🚀 EL PARACAÍDAS DEFINITIVO
+						if (clasePago == "99" || string.IsNullOrWhiteSpace(clasePago))
+						{
+							clasePago = "1";
+							if (bimestre == "99" || string.IsNullOrWhiteSpace(bimestre)) bimestre = "0";
+						}
 
 						string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
 						if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
@@ -129,7 +183,6 @@ namespace swCargaMasivaIngresos.Services
 							claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
 						}
 
-						// 🚀 FECHAS DINÁMICAS HISTÓRICAS
 						string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
 						if (string.IsNullOrWhiteSpace(fechaVigencia)) fechaVigencia = new DateTime(anioFiscal, 12, 31).ToString("yyyy-MM-dd");
 						else if (double.TryParse(fechaVigencia, out double diasExcel) && diasExcel > 10000 && !fechaVigencia.Contains("-") && !fechaVigencia.Contains("/")) fechaVigencia = DateTime.FromOADate(diasExcel).ToString("yyyy-MM-dd");
@@ -145,12 +198,13 @@ namespace swCargaMasivaIngresos.Services
 						nuevaFila["ImpuestoDeterminado"] = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0");
 						nuevaFila["FechaVigencia"] = fechaVigencia;
 						nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
-						
+
 						if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "IdControl", ""), out int idCtrl)) nuevaFila["IdControl"] = idCtrl;
 						else nuevaFila["IdControl"] = DBNull.Value;
 
 						if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", ""), out int folEmi)) nuevaFila["FolioEmision"] = folEmi;
 						else nuevaFila["FolioEmision"] = DBNull.Value;
+
 						tablaCrudos.Rows.Add(nuevaFila);
 					}
 
@@ -158,14 +212,11 @@ namespace swCargaMasivaIngresos.Services
 
 					if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 					{
-						// Ejecución asíncrona de Ingesta y Consolidación
 						List<string> erroresLogicos = await InsertarBulkAsync(resultadoLimpieza.TablaValidos, param);
 
 						if (erroresLogicos.Any())
 						{
 							resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
-
-							// 🚀 FIX: Matemáticas honestas para disparar el correo con CSV
 							resultadoFinal.RegistrosFallidos += erroresLogicos.Count;
 							resultadoFinal.RegistrosExitosos -= erroresLogicos.Count;
 						}
@@ -242,7 +293,6 @@ namespace swCargaMasivaIngresos.Services
 			{
 				await conn.OpenAsync();
 
-				// PASO 1: Inserción Masiva a Staging
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
 					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
@@ -263,7 +313,6 @@ namespace swCargaMasivaIngresos.Services
 					await bulkCopy.WriteToServerAsync(lote);
 				}
 
-				// PASO 2: Ingesta a PadronDestino
 				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
@@ -272,7 +321,6 @@ namespace swCargaMasivaIngresos.Services
 					await cmd.ExecuteNonQueryAsync();
 				}
 
-				// 🚀 PASO 3: CONSOLIDACIÓN Y CAPTURA DE ERRORES
 				using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
 				{
 					cmdConsolidacion.CommandType = CommandType.StoredProcedure;

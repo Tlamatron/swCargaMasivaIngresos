@@ -131,7 +131,9 @@ namespace swCargaMasivaIngresos.Services
 		/// <returns></returns>
 		private static ResultadoLecturaCruda LeerTextoPlano(string rutaArchivo)
 		{
-			var resultado = new ResultadoLecturaCruda { TablaCruda = new DataTable(), ContextoPestaña = "TXT_CSV" };
+			string nombreArchivo = Path.GetFileNameWithoutExtension(rutaArchivo);
+			var resultado = new ResultadoLecturaCruda { TablaCruda = new DataTable(), ContextoPestaña = nombreArchivo };
+
 			var lineas = new List<string[]>();
 			char delimitadorDescubierto = '|'; // Por defecto
 
