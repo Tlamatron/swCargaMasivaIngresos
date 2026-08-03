@@ -88,7 +88,12 @@ namespace swCargaMasivaIngresos.Services
 
 							if (clasePagoInferida == "99")
 							{
-								if (textoEncabezadoGlobal.Contains("BIMESTRAL") || textoEncabezadoGlobal.Contains("BIMESTRE") || textoEncabezadoGlobal.Contains("BIM"))
+								// 🚀 NUEVO ESLABÓN: Protección contra títulos ambiguos de Lafragua
+								if (textoEncabezadoGlobal.Contains("ANUAL O BIMESTRAL") || textoEncabezadoGlobal.Contains("ANUAL/BIMESTRAL") || textoEncabezadoGlobal.Contains("ANUAL Y BIMESTRAL"))
+								{
+									// Es ambiguo. Dejamos que el motor a nivel de renglón decida.
+								}
+								else if (textoEncabezadoGlobal.Contains("BIMESTRAL") || textoEncabezadoGlobal.Contains("BIMESTRE") || textoEncabezadoGlobal.Contains("BIM"))
 								{
 									clasePagoInferida = "2";
 								}
@@ -98,6 +103,7 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
+							// (Se mantiene intacta la lectura del tipo de predio)
 							if (textoEncabezadoGlobal.Contains("SUBURBANO") || textoEncabezadoGlobal.Contains("SUB-URBANO") || textoEncabezadoGlobal.Contains("SUB URBANO"))
 							{
 								tipoPredioInferido = "3";
@@ -111,6 +117,40 @@ namespace swCargaMasivaIngresos.Services
 								tipoPredioInferido = "1";
 							}
 						}
+						//if (filaInicioDatos > 0)
+						//{
+						//	string textoEncabezadoGlobal = "";
+						//	for (int r = 0; r < filaInicioDatos; r++)
+						//	{
+						//		var rowInfo = tablaExcel.Rows[r].ItemArray.Select(x => x?.ToString().Trim().ToUpper() ?? "");
+						//		textoEncabezadoGlobal += " " + string.Join(" ", rowInfo);
+						//	}
+
+						//	if (clasePagoInferida == "99")
+						//	{
+						//		if (textoEncabezadoGlobal.Contains("BIMESTRAL") || textoEncabezadoGlobal.Contains("BIMESTRE") || textoEncabezadoGlobal.Contains("BIM"))
+						//		{
+						//			clasePagoInferida = "2";
+						//		}
+						//		else if (textoEncabezadoGlobal.Contains("ANUAL"))
+						//		{
+						//			clasePagoInferida = "1";
+						//		}
+						//	}
+
+						//	if (textoEncabezadoGlobal.Contains("SUBURBANO") || textoEncabezadoGlobal.Contains("SUB-URBANO") || textoEncabezadoGlobal.Contains("SUB URBANO"))
+						//	{
+						//		tipoPredioInferido = "3";
+						//	}
+						//	else if (textoEncabezadoGlobal.Contains("RUSTICO") || textoEncabezadoGlobal.Contains("RÚSTICO"))
+						//	{
+						//		tipoPredioInferido = "2";
+						//	}
+						//	else if (textoEncabezadoGlobal.Contains("URBANO"))
+						//	{
+						//		tipoPredioInferido = "1";
+						//	}
+						//}
 
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraRaw();
@@ -262,6 +302,14 @@ namespace swCargaMasivaIngresos.Services
 
 							// 4. CASCADA LÓGICA DE INFERENCIA DE PAGO
 							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
+
+							if (!string.IsNullOrWhiteSpace(clasePago) && clasePago != "99")
+							{
+								string cpUpper = clasePago.ToUpper();
+								if (cpUpper == "ANUAL" || cpUpper == "A" || cpUpper.Contains("ANUAL")) clasePago = "1";
+								else if (cpUpper == "BIMESTRAL" || cpUpper == "B" || cpUpper.StartsWith("BIM")) clasePago = "2";
+							}
+
 							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
 
 							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
@@ -306,7 +354,7 @@ namespace swCargaMasivaIngresos.Services
 									bimestre = "6";
 								}
 							}
-							else if (esPagoAnualPorTexto || textoFilaCompleta.Contains("PAGO 20") || textoFilaCompleta.Contains("AL 20"))
+							else if (esPagoAnualPorTexto || textoFilaCompleta.Contains("PAGO 20") || textoFilaCompleta.Contains("AL 20") || textoFilaCompleta.Contains("ANUAL"))
 							{
 								clasePago = "1";
 								bimestre = "0";

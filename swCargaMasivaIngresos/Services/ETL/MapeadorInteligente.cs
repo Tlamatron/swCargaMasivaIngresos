@@ -603,7 +603,7 @@ namespace swCargaMasivaIngresos.Services
 			}
 
 			// 🚀 1. PRIMERO ASEGURAMOS LOS METADATOS COMPUESTOS (El blindaje)
-			Asignar("ClasePago", "CLASE PAGO", "CLASE DE PAGO", "TIPO PAGO", "TIPO DE PAGO");
+			Asignar("ClasePago", "CLASE PAGO", "CLASE DE PAGO", "TIPO PAGO", "TIPO DE PAGO", "PAGO ANUAL O BIMESTRAL", "PAGO ANUAL/BIMESTRAL", "PERIODO DE PAGO");
 			Asignar("BimestreConsolidado", "BIMESTRE PAGADO", "BIMESTRE", "PERIODO", "MESES");
 			Asignar("ClaveMunicipio", "CLAVE DEL MUNICIPIO", "MUNICIPIO", "CVEMUN", "MPIO");
 			Asignar("TipoPredio", "TIPO DE PREDIO", "PREDIO", "TIPO", "DESC_PRED","T/P");
