@@ -154,7 +154,7 @@ namespace swCargaMasivaIngresos.Services
 								{
 									byte[] buffer = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csvContent.ToString())).ToArray();
 									MemoryStream ms = new MemoryStream(buffer);
-									mensaje.Attachments.Add(new Attachment(ms, $"Errores_Carga_{parametros.FolioCarga}.csv", "text/csv"));
+									mensaje.Attachments.Add(new Attachment(ms, $"Bitacora_Notificaciones_{parametros.FolioCarga}.csv", "text/csv"));
 								}
 							}
 						}
