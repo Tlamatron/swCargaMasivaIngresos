@@ -44,7 +44,7 @@ namespace swCargaMasivaIngresos.Services
 						string nombrePestaña = tablaExcel.TableName;
 						string pestanaUpper = nombrePestaña.ToUpper();
 
-						// 🚀 INFERENCIA DE CONTEXTO DESDE EL NOMBRE DE LA PESTAÑA
+						// INFERENCIA DE CONTEXTO DESDE EL NOMBRE DE LA PESTAÑA
 						string clasePagoInferida = "99";
 						string bimestreInferido = "99";
 						string tipoPredioInferido = "";
@@ -76,7 +76,7 @@ namespace swCargaMasivaIngresos.Services
 
 						if (mapaCrudo.Count == 0) continue;
 
-						// 🚀 NUEVA INFERENCIA: LEER EL MEMBRETE/ENCABEZADOS DEL ARCHIVO
+						// NUEVA INFERENCIA: LEER EL MEMBRETE/ENCABEZADOS DEL ARCHIVO
 						if (filaInicioDatos > 0)
 						{
 							string textoEncabezadoGlobal = "";
@@ -115,9 +115,7 @@ namespace swCargaMasivaIngresos.Services
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraRaw();
 
-						// ==============================================================================
-						// 🚀 PRE-ESCANEO DE SEGURIDAD (Detección de Exclusión Mutua)
-						// ==============================================================================
+						// PRE-ESCANEO DE SEGURIDAD
 						bool archivoTienePagosBimestrales = mapaBloqueado.BimestresSueltos.Count > 0;
 						if (!archivoTienePagosBimestrales)
 						{
@@ -132,48 +130,45 @@ namespace swCargaMasivaIngresos.Services
 							}
 						}
 
-						LogService.WriteLogAsync("WARN", "SISTEMA_DEBUG", "Procesador", $"[TRACE] Bucle en fila {filaInicioDatos}. Referencia Bimestral Encontrada: {archivoTienePagosBimestrales}").Wait();
-
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
 							var fila = tablaExcel.Rows[i];
 
 							string textoInicioFila = string.Join(" ", fila.ItemArray.Take(6).Select(x => x?.ToString().ToUpper() ?? ""));
-							if (textoInicioFila.Contains("TOTAL") || textoInicioFila.Contains("SUMA") || textoInicioFila.Contains("CUADRO")) break;
+
+							// Salto de Subtotales y Totales agrupados en el documento
+							if (textoInicioFila.Contains("TOTAL") || textoInicioFila.Contains("SUMA") || textoInicioFila.Contains("CUADRO")) continue;
 
 							if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 
-							// 🚀 1. EXTRACCIÓN SEGURA Y LIMPIEZA INTELIGENTE DE LA LLAVE
+							// 1. EXTRACCIÓN SEGURA Y LIMPIEZA INTELIGENTE DE LA LLAVE
 							string cuentaPredial = ExtraerSeguro(fila, mapaBloqueado, "CuentaPredial", "");
-							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
+
+							// Salto de títulos de tablas apiladas
+							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.ToUpper().Contains("CUENTA") || cuentaPredial.ToUpper().Contains("CTA")) continue;
 
 							bool esPagoAnualPorTexto = false;
 							bool esBimestralPorTexto = false;
 							string bimestrePorTexto = "";
 							string cuentaUpper = cuentaPredial.ToUpper();
 
-							// Limpiar "BIMESTRAL"
 							if (cuentaUpper.Contains("(BIMESTRAL)"))
 							{
 								cuentaPredial = cuentaUpper.Replace("(BIMESTRAL)", "").Trim();
 								cuentaUpper = cuentaPredial.ToUpper();
 							}
 
-							// 🛠️ FIX ZIHUATEUTLA (Febrero): Detectar y extraer "BIMESTRE 1", "BIM 2", etc.
 							var regexBimestreExacto = new System.Text.RegularExpressions.Regex(@"(?i)(?:BIMESTRE|BIM)\s*([1-6])");
 							var matchBimestre = regexBimestreExacto.Match(cuentaUpper);
 							if (matchBimestre.Success)
 							{
 								esBimestralPorTexto = true;
-								bimestrePorTexto = matchBimestre.Groups[1].Value; // Extrae mágicamente el número (ej. "1")
-
-								// Borramos ese texto de la cuenta para dejarla limpia (ej. "4353")
+								bimestrePorTexto = matchBimestre.Groups[1].Value;
 								cuentaPredial = regexBimestreExacto.Replace(cuentaUpper, "").Trim();
 								cuentaPredial = cuentaPredial.Replace("()", "").Replace("[]", "").Replace("-", "").Trim();
 								cuentaUpper = cuentaPredial.ToUpper();
 							}
 
-							// 🛠️ Limpiar textos como "PAGO 2026" o "DEL 2022 AL 2026" usando Regex.
 							var regexPagoAnual = new System.Text.RegularExpressions.Regex(@"(?i)(PAGO\s*DEL\s*\d{4}\s*AL\s*\d{4}|PAGO\s*\d{4})");
 							if (regexPagoAnual.IsMatch(cuentaUpper))
 							{
@@ -204,14 +199,13 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-							// 🚀 2. EXTRACCIÓN HISTÓRICA DE AÑOS PAGADOS
+							// 2. EXTRACCIÓN HISTÓRICA DE AÑOS PAGADOS (Como Lista Única)
 							string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "").ToUpper().Trim();
 							int anioFiscal = DateTime.Now.Year;
-							List<int> aniosVerticales = new List<int>(); // 🚀 AQUÍ ESTÁ LA LISTA CORRECTA
+							List<int> aniosVerticales = new List<int>();
 
 							if (string.IsNullOrWhiteSpace(anioPredialStr))
 							{
-								// Buscamos si hay alguna columna en el Excel que sea un año (ej. columna "2024")
 								foreach (var kvp in mapaCrudo)
 								{
 									if (System.Text.RegularExpressions.Regex.IsMatch(kvp.Key, @"^(19|20)\d\d$"))
@@ -231,18 +225,14 @@ namespace swCargaMasivaIngresos.Services
 								var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\b(19\d\d|20\d\d)\b");
 								if (matches.Count > 0)
 								{
-									// Mantenemos anioFiscal para la fecha por defecto
 									anioFiscal = int.Parse(matches[0].Value);
 
-									// Extraemos todos los años para el desenrollado
 									var extraidos = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
 									int minAnio = extraidos.Min();
 									int maxAnio = extraidos.Max();
 
-									// Protección contra errores tipográficos extremos (ej. "1900 AL 2026")
 									if (maxAnio - minAnio > 20) minAnio = maxAnio;
 
-									// Generamos la lista completa de años involucrados en el rango
 									for (int y = minAnio; y <= maxAnio; y++)
 									{
 										aniosVerticales.Add(y);
@@ -254,7 +244,7 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-							// 🚀 3. HOMOLOGACIÓN DE TIPO DE PREDIO
+							// 3. HOMOLOGACIÓN DE TIPO DE PREDIO
 							string tipoPredio = ExtraerSeguro(fila, mapaBloqueado, "TipoPredio", "").ToUpper().Trim();
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = !string.IsNullOrWhiteSpace(tipoPredioHibrido) ? tipoPredioHibrido : tipoPredioInferido;
 
@@ -262,24 +252,20 @@ namespace swCargaMasivaIngresos.Services
 							else if (tipoPredio == "R" || tipoPredio.StartsWith("RUSTICO") || tipoPredio.StartsWith("RÚSTICO")) tipoPredio = "2";
 							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB") || tipoPredio == "S-URB" || tipoPredio.Contains("-URB") || tipoPredio == "S_URB" || tipoPredio.Contains("_URB")) tipoPredio = "3";
 
-							// 🛡️ FALLBACK DEFINITIVO: Si no es 1, 2 ni 3, confiamos en el membrete de la pestaña
 							if (tipoPredio != "1" && tipoPredio != "2" && tipoPredio != "3")
 							{
 								tipoPredio = tipoPredioInferido;
-								if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1"; // Último recurso absoluto
+								if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 							}
 
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
-							// =========================================================================
-							// 🚀 4. CASCADA LÓGICA DE INFERENCIA DE PAGO 
-							// =========================================================================
+							// 4. CASCADA LÓGICA DE INFERENCIA DE PAGO
 							string clasePago = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "");
 							if (string.IsNullOrWhiteSpace(clasePago)) clasePago = clasePagoInferida;
 
 							string bimestre = MapeadorInteligente.RastrearBimestres(fila, mapaBloqueado);
 
-							// 💡 INFERENCIA A: Buscar columna con la letra "B" en el encabezado
 							if ((string.IsNullOrWhiteSpace(clasePago) || clasePago == "99") && filaInicioDatos > 0)
 							{
 								var filaEncabezados = tablaExcel.Rows[filaInicioDatos - 1];
@@ -305,7 +291,6 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-							// 💡 INFERENCIA B: Inferencia de contexto a nivel de renglón
 							string textoFilaCompleta = string.Join(" ", fila.ItemArray).ToUpper();
 
 							if (esBimestralPorTexto)
@@ -327,45 +312,37 @@ namespace swCargaMasivaIngresos.Services
 								bimestre = "0";
 							}
 
-							// 💡 INFERENCIA C: Auto-Corrección lógica por Bimestre explícito.
 							if (clasePago == "99" || string.IsNullOrWhiteSpace(clasePago))
 							{
-								// Si halló un bimestre del 1 al 6, obliga a que la clase sea 2.
 								if (!string.IsNullOrWhiteSpace(bimestre) && bimestre != "0" && bimestre != "99")
 								{
 									clasePago = "2";
 								}
-								// 🛠️ EXPLICACIÓN NUEVA: Si halló un "0" en la columna bimestre, obliga a que sea Anual.
 								else if (bimestre == "0")
 								{
 									clasePago = "1";
 								}
 							}
 
-							// 💡 INFERENCIA D: El Default Inteligente
 							if (clasePago == "99" || string.IsNullOrWhiteSpace(clasePago))
 							{
-								// Verificamos si extrajimos un año directamente del nombre de alguna columna (ej. "2026")
 								bool encontroAnioEnEncabezado = mapaCrudo.Keys.Any(k => System.Text.RegularExpressions.Regex.IsMatch(k, @"\b(19|20)\d\d\b"));
 
-								// 1. Si el renglón tiene un año válido O si detectamos un año en las columnas
 								if ((!string.IsNullOrWhiteSpace(anioPredialStr) && anioPredialStr != "-") || encontroAnioEnEncabezado)
 								{
-									clasePago = "1"; // Es Anual indiscutiblemente
+									clasePago = "1";
 								}
-								// 2. Si vimos referencias bimestrales en el archivo
 								else if (archivoTienePagosBimestrales)
 								{
 									clasePago = "1";
 								}
-								// 3. Si la inferencia global de la pestaña era Anual
 								else if (clasePagoInferida == "1")
 								{
 									clasePago = "1";
 								}
 							}
 
-							// 🚀 5. ASIGNACIONES FINALES (Flexibilidad de Fecha Histórica)
+							// 5. ASIGNACIONES FINALES
 							string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
 							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
 								claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
@@ -380,26 +357,45 @@ namespace swCargaMasivaIngresos.Services
 							else
 								fechaVigencia = new DateTime(anioFiscal, 12, 31).ToString("yyyy-MM-dd");
 
-							// 🚀 6. GENERACIÓN DE FILAS Y LA BARRERA DE RECHAZO
+							// 6. GENERACIÓN DE FILAS Y LA BARRERA DE RECHAZO
 							var bimestresMultiples = MapeadorInteligente.ExtraerBimestresMultiplesConMonto(fila, mapaBloqueado);
 
+							// Desagrupador Anual a Prueba de Subtotales
 							var aniosMultiples = new Dictionary<int, decimal>();
 							foreach (var kvp in mapaCrudo)
 							{
-								if (System.Text.RegularExpressions.Regex.IsMatch(kvp.Key.Trim(), @"^(19|20)\d\d$"))
+								bool esMetadato = false;
+								foreach (var colBloqueada in mapaBloqueado.Columnas)
 								{
+									if (colBloqueada.Key != "ImpuestoDeterminado" && colBloqueada.Value == kvp.Value)
+									{
+										esMetadato = true;
+										break;
+									}
+								}
+								if (esMetadato) continue;
+
+								string nombreColNormalizado = kvp.Key.ToUpper().Replace(" ", "");
+
+								if (nombreColNormalizado.Contains("TOTAL") || nombreColNormalizado.Contains("SUBTOTAL") || nombreColNormalizado.Contains("RECARGO") || nombreColNormalizado.Contains("MULTA")) continue;
+
+								var matchAnio = System.Text.RegularExpressions.Regex.Match(kvp.Key.Trim(), @"\b(19[8-9]\d|20[0-5]\d)\b");
+								if (matchAnio.Success)
+								{
+									int anioDetectado = int.Parse(matchAnio.Value);
 									string valorAnioStr = fila[kvp.Value]?.ToString().Replace("$", "").Replace(",", "").Trim() ?? "";
+
 									if (!string.IsNullOrWhiteSpace(valorAnioStr) && valorAnioStr != "0" && valorAnioStr != "0.00" && valorAnioStr != "-")
 									{
 										if (decimal.TryParse(valorAnioStr, out decimal montoAnio))
 										{
-											aniosMultiples[int.Parse(kvp.Key.Trim())] = montoAnio;
+											aniosMultiples[anioDetectado] = montoAnio;
 										}
 									}
 								}
 							}
 
-							// 🚀 Extracción GLOBAL de llaves de cruce exacto (Para evitar problemas de Scope)
+							// Extracción GLOBAL de llaves de cruce exacto
 							int folEmi = 0;
 							int idCtrl = 0;
 							string idControlStr = ExtraerSeguro(fila, mapaBloqueado, "IdControl", "").Replace(",", "").Trim();
@@ -410,9 +406,10 @@ namespace swCargaMasivaIngresos.Services
 
 							bool tieneLlavesExactas = (idCtrl > 0 && folEmi > 0);
 
+							// DISRIBUCION A TABLAS INTERNAS
 							if (bimestresMultiples.Count > 0)
 							{
-								clasePago = "2"; // Fuerza el tipo de pago a Bimestral
+								clasePago = "2";
 								foreach (var bim in bimestresMultiples)
 								{
 									DataRow nuevaFila = tablaCrudos.NewRow();
@@ -433,8 +430,7 @@ namespace swCargaMasivaIngresos.Services
 							}
 							else if (aniosMultiples.Count > 0)
 							{
-								// 🚀 BLOQUE: Desagrupador de Años Horizontales (Jopala)
-								clasePago = "1"; // Si paga años completos, es Anual
+								clasePago = "1";
 								bimestre = "0";
 
 								foreach (var anioKvp in aniosMultiples)
@@ -447,7 +443,6 @@ namespace swCargaMasivaIngresos.Services
 									nuevaFila["Bimestre"] = bimestre;
 									nuevaFila["ImpuestoDeterminado"] = anioKvp.Value;
 
-									// Inyectar el año de la deuda en la Fecha
 									string fechaVigOriginal = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
 									string fechaVigAjustada;
 
@@ -459,7 +454,7 @@ namespace swCargaMasivaIngresos.Services
 									{
 										var dtOrig = DateTime.FromOADate(diasExcel);
 										int m = dtOrig.Month; int d = dtOrig.Day;
-										if (m == 2 && d == 29 && !DateTime.IsLeapYear(anioKvp.Key)) d = 28; // Salvar bisiestos
+										if (m == 2 && d == 29 && !DateTime.IsLeapYear(anioKvp.Key)) d = 28;
 										fechaVigAjustada = new DateTime(anioKvp.Key, m, d).ToString("yyyy-MM-dd");
 									}
 									else if (DateTime.TryParse(fechaVigOriginal, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
@@ -484,7 +479,7 @@ namespace swCargaMasivaIngresos.Services
 							}
 							else
 							{
-								// 🚀 BLOQUE: Layout Tradicional Vertical
+								// Layout Tradicional Vertical
 								if (string.IsNullOrWhiteSpace(bimestre)) bimestre = bimestreInferido;
 
 								if (string.IsNullOrWhiteSpace(bimestre) || bimestre == "99")
@@ -494,7 +489,6 @@ namespace swCargaMasivaIngresos.Services
 
 								if (clasePago == "1" && anioPredialStr == "-") continue;
 
-								// 🛑 BARRERA 1: Sin contexto en absoluto (Se perdona si hay llaves exactas)
 								if (clasePago == "99" && !tieneLlavesExactas)
 								{
 									resultadoFinal.RegistrosFallidos++;
@@ -502,7 +496,6 @@ namespace swCargaMasivaIngresos.Services
 									continue;
 								}
 
-								// 🛑 BARRERA 2: Contradicción Anual (Se perdona si hay llaves exactas)
 								if (clasePago == "1" && (bimestre != "0" && bimestre != "99") && !tieneLlavesExactas)
 								{
 									resultadoFinal.RegistrosFallidos++;
@@ -510,7 +503,6 @@ namespace swCargaMasivaIngresos.Services
 									continue;
 								}
 
-								// 🛑 BARRERA 3: Contradicción Bimestral (Se perdona si hay llaves exactas)
 								if (clasePago == "2" && (bimestre == "0" || bimestre == "99") && !tieneLlavesExactas)
 								{
 									resultadoFinal.RegistrosFallidos++;
@@ -520,29 +512,22 @@ namespace swCargaMasivaIngresos.Services
 
 								string impuestoStr = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0").Trim();
 								impuestoStr = impuestoStr.Replace("$", "").Replace(",", "").Trim();
-								decimal impuestoTotal = 0m;
-								decimal.TryParse(impuestoStr, out impuestoTotal);
+								decimal.TryParse(impuestoStr, out decimal impuestoTotal);
 
 								decimal impuestoAsignado;
 
-								// 🚀 NUEVA REGLA DE NEGOCIO: Control Estricto de Rangos Verticales
+								// Regla de Negocio: Control Estricto de Rangos Verticales
 								if (aniosVerticales.Count > 1)
 								{
-									// Si es un rango (ej. 2022 AL 2025), mandamos el monto en 0. 
-									// SQL respetará el monto original de la deuda y solo marcará el registro como pagado.
 									impuestoAsignado = 0m;
-
-									// Forzamos por default que sea Anual
 									clasePago = "1";
 									bimestre = "0";
 								}
 								else
 								{
-									// Si es un solo año, mandamos el importe tal cual viene en el Excel
 									impuestoAsignado = impuestoTotal;
 								}
 
-								// 🚀 BUCLE MAESTRO: Generamos una fila por cada año del rango
 								foreach (int anioReportado in aniosVerticales)
 								{
 									DataRow nuevaFila = tablaCrudos.NewRow();
@@ -551,9 +536,8 @@ namespace swCargaMasivaIngresos.Services
 									nuevaFila["CuentaPredial"] = cuentaPredial;
 									nuevaFila["ClasePago"] = clasePago;
 									nuevaFila["Bimestre"] = bimestre;
-									nuevaFila["ImpuestoDeterminado"] = impuestoAsignado; // Aplicamos el monto según la regla
+									nuevaFila["ImpuestoDeterminado"] = impuestoAsignado;
 
-									// AJUSTE DINÁMICO DE FECHA
 									string fechaVigOriginal = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
 									string fechaVigAjustada;
 
@@ -597,11 +581,9 @@ namespace swCargaMasivaIngresos.Services
 						if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 						{
 							List<string> erroresLogicos = await InsertarBulkAsync(resultadoLimpieza.TablaValidos, param);
-							if (erroresLogicos.Any()) 
-							{ 
+							if (erroresLogicos.Any())
+							{
 								resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
-								
-								// 🚀 MATEMÁTICAS HONESTAS: Convertimos los éxitos falsos en fallos reales
 								resultadoFinal.RegistrosFallidos += erroresLogicos.Count;
 								resultadoFinal.RegistrosExitosos -= erroresLogicos.Count;
 							}
