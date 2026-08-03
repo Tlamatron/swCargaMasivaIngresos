@@ -363,8 +363,32 @@ namespace swCargaMasivaIngresos.Services
 							// 🚀 6. GENERACIÓN DE FILAS Y LA BARRERA DE RECHAZO
 							var bimestresMultiples = MapeadorInteligente.ExtraerBimestresMultiplesConMonto(fila, mapaBloqueado);
 
+							var aniosMultiples = new Dictionary<int, decimal>();
+							foreach (var kvp in mapaCrudo)
+							{
+								if (System.Text.RegularExpressions.Regex.IsMatch(kvp.Key.Trim(), @"^(19|20)\d\d$"))
+								{
+									string valorAnioStr = fila[kvp.Value]?.ToString().Replace("$", "").Replace(",", "").Trim() ?? "";
+									if (!string.IsNullOrWhiteSpace(valorAnioStr) && valorAnioStr != "0" && valorAnioStr != "0.00" && valorAnioStr != "-")
+									{
+										if (decimal.TryParse(valorAnioStr, out decimal montoAnio))
+										{
+											aniosMultiples[int.Parse(kvp.Key.Trim())] = montoAnio;
+										}
+									}
+								}
+							}
+
+							// Extraemos llaves de cruce exacto ANTES de las barreras
 							int folEmi = 0;
+							string idControlStr = ExtraerSeguro(fila, mapaBloqueado, "IdControl", "").Replace(",", "").Trim();
+							string folioEmisionStr = ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", "").Replace(",", "").Trim();
 							int idCtrl = 0;
+
+							if (double.TryParse(idControlStr, out double valCtrl)) idCtrl = (int)valCtrl;
+							if (double.TryParse(folioEmisionStr, out double valFol)) folEmi = (int)valFol;
+
+							bool tieneLlavesExactas = (idCtrl > 0 && folEmi > 0);
 
 							if (bimestresMultiples.Count > 0)
 							{
@@ -381,12 +405,59 @@ namespace swCargaMasivaIngresos.Services
 									nuevaFila["FechaVigencia"] = fechaVigencia;
 									nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
 
-									// Lees el valor crudo o dejas nulo si falla
-									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "IdControl", ""), out idCtrl)) nuevaFila["IdControl"] = idCtrl;
-									else nuevaFila["IdControl"] = DBNull.Value;
+									if (tieneLlavesExactas) { nuevaFila["IdControl"] = idCtrl; nuevaFila["FolioEmision"] = folEmi; }
+									else { nuevaFila["IdControl"] = DBNull.Value; nuevaFila["FolioEmision"] = DBNull.Value; }
 
-									if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", ""), out folEmi)) nuevaFila["FolioEmision"] = folEmi;
-									else nuevaFila["FolioEmision"] = DBNull.Value;
+									tablaCrudos.Rows.Add(nuevaFila);
+								}
+							}
+							else if (aniosMultiples.Count > 0)
+							{
+								// 🚀 NUEVO BLOQUE: Desagrupador de Años Horizontales (Jopala)
+								clasePago = "1"; // Si paga años completos, es Anual
+								bimestre = "0";
+
+								foreach (var anioKvp in aniosMultiples)
+								{
+									DataRow nuevaFila = tablaCrudos.NewRow();
+									nuevaFila["ClaveMunicipio"] = claveMunicipio;
+									nuevaFila["TipoPredio"] = tipoPredio;
+									nuevaFila["CuentaPredial"] = cuentaPredial;
+									nuevaFila["ClasePago"] = clasePago;
+									nuevaFila["Bimestre"] = bimestre;
+									nuevaFila["ImpuestoDeterminado"] = anioKvp.Value;
+
+									// 🚀 EL SECRETO: Inyectar el año de la deuda en la Fecha para que SQL lo acomode
+									string fechaVigOriginal = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
+									string fechaVigAjustada;
+
+									if (string.IsNullOrWhiteSpace(fechaVigOriginal))
+									{
+										fechaVigAjustada = new DateTime(anioKvp.Key, 12, 31).ToString("yyyy-MM-dd");
+									}
+									else if (double.TryParse(fechaVigOriginal, out double diasExcel) && diasExcel > 10000 && !fechaVigOriginal.Contains("-") && !fechaVigOriginal.Contains("/"))
+									{
+										var dtOrig = DateTime.FromOADate(diasExcel);
+										int m = dtOrig.Month; int d = dtOrig.Day;
+										if (m == 2 && d == 29 && !DateTime.IsLeapYear(anioKvp.Key)) d = 28; // Salvar bisiestos
+										fechaVigAjustada = new DateTime(anioKvp.Key, m, d).ToString("yyyy-MM-dd");
+									}
+									else if (DateTime.TryParse(fechaVigOriginal, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
+									{
+										int m = fechaParseada.Month; int d = fechaParseada.Day;
+										if (m == 2 && d == 29 && !DateTime.IsLeapYear(anioKvp.Key)) d = 28;
+										fechaVigAjustada = new DateTime(anioKvp.Key, m, d).ToString("yyyy-MM-dd");
+									}
+									else
+									{
+										fechaVigAjustada = new DateTime(anioKvp.Key, 12, 31).ToString("yyyy-MM-dd");
+									}
+
+									nuevaFila["FechaVigencia"] = fechaVigAjustada;
+									nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
+
+									if (tieneLlavesExactas) { nuevaFila["IdControl"] = idCtrl; nuevaFila["FolioEmision"] = folEmi; }
+									else { nuevaFila["IdControl"] = DBNull.Value; nuevaFila["FolioEmision"] = DBNull.Value; }
 
 									tablaCrudos.Rows.Add(nuevaFila);
 								}
@@ -396,23 +467,12 @@ namespace swCargaMasivaIngresos.Services
 								// Layout Tradicional Vertical
 								if (string.IsNullOrWhiteSpace(bimestre)) bimestre = bimestreInferido;
 
-								// Limpieza lógica del bimestre 
 								if (string.IsNullOrWhiteSpace(bimestre) || bimestre == "99")
 								{
 									bimestre = (clasePago == "1") ? "0" : "99";
 								}
 
 								if (clasePago == "1" && anioPredialStr == "-") continue;
-
-								// 🚀 NUEVO: Extraemos llaves de cruce exacto ANTES de las barreras
-								string idControlStr = ExtraerSeguro(fila, mapaBloqueado, "IdControl", "").Replace(",", "").Trim();
-								string folioEmisionStr = ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", "").Replace(",", "").Trim();
-								
-								// Extraemos como double por si ExcelDataReader lo mandó con decimales ocultos (ej. "51917.0")
-								if (double.TryParse(idControlStr, out double valCtrl)) idCtrl = (int)valCtrl;
-								if (double.TryParse(folioEmisionStr, out double valFol)) folEmi = (int)valFol;
-
-								bool tieneLlavesExactas = (idCtrl > 0 && folEmi > 0);
 
 								// 🛑 BARRERA 1: Sin contexto en absoluto (Se perdona si hay llaves exactas)
 								if (clasePago == "99" && !tieneLlavesExactas)
@@ -454,17 +514,8 @@ namespace swCargaMasivaIngresos.Services
 								nuevaFila["FechaVigencia"] = fechaVigencia;
 								nuevaFila["FolioCarga"] = param.FolioCarga.ToString();
 
-								// Asignamos las llaves si existieron
-								if (tieneLlavesExactas)
-								{
-									nuevaFila["IdControl"] = idCtrl;
-									nuevaFila["FolioEmision"] = folEmi;
-								}
-								else
-								{
-									nuevaFila["IdControl"] = DBNull.Value;
-									nuevaFila["FolioEmision"] = DBNull.Value;
-								}
+								if (tieneLlavesExactas) { nuevaFila["IdControl"] = idCtrl; nuevaFila["FolioEmision"] = folEmi; }
+								else { nuevaFila["IdControl"] = DBNull.Value; nuevaFila["FolioEmision"] = DBNull.Value; }
 
 								tablaCrudos.Rows.Add(nuevaFila);
 							}
