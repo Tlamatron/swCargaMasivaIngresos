@@ -207,6 +207,7 @@ namespace swCargaMasivaIngresos.Services
 							// 🚀 2. EXTRACCIÓN HISTÓRICA DE AÑOS PAGADOS
 							string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "").ToUpper().Trim();
 							int anioFiscal = DateTime.Now.Year;
+							List<int> aniosVerticales = new List<int>(); // 🚀 AQUÍ ESTÁ LA LISTA CORRECTA
 
 							if (string.IsNullOrWhiteSpace(anioPredialStr))
 							{
@@ -223,14 +224,33 @@ namespace swCargaMasivaIngresos.Services
 										}
 									}
 								}
+								aniosVerticales.Add(anioFiscal);
 							}
 							else
 							{
 								var matches = System.Text.RegularExpressions.Regex.Matches(anioPredialStr, @"\b(19\d\d|20\d\d)\b");
 								if (matches.Count > 0)
 								{
-									// Si hay varios años en la celda (ej. "2021-2023"), tomamos el más antiguo o el primero para la fecha base
+									// Mantenemos anioFiscal para la fecha por defecto
 									anioFiscal = int.Parse(matches[0].Value);
+
+									// Extraemos todos los años para el desenrollado
+									var extraidos = matches.Cast<System.Text.RegularExpressions.Match>().Select(m => int.Parse(m.Value)).ToList();
+									int minAnio = extraidos.Min();
+									int maxAnio = extraidos.Max();
+
+									// Protección contra errores tipográficos extremos (ej. "1900 AL 2026")
+									if (maxAnio - minAnio > 20) minAnio = maxAnio;
+
+									// Generamos la lista completa de años involucrados en el rango
+									for (int y = minAnio; y <= maxAnio; y++)
+									{
+										aniosVerticales.Add(y);
+									}
+								}
+								else
+								{
+									aniosVerticales.Add(anioFiscal);
 								}
 							}
 
@@ -379,14 +399,14 @@ namespace swCargaMasivaIngresos.Services
 								}
 							}
 
-							// Extraemos llaves de cruce exacto ANTES de las barreras
+							// 🚀 Extracción GLOBAL de llaves de cruce exacto (Para evitar problemas de Scope)
 							int folEmi = 0;
+							int idCtrl = 0;
 							string idControlStr = ExtraerSeguro(fila, mapaBloqueado, "IdControl", "").Replace(",", "").Trim();
 							string folioEmisionStr = ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", "").Replace(",", "").Trim();
-							int idCtrl = 0;
 
-							if (double.TryParse(idControlStr, out double valCtrl)) idCtrl = (int)valCtrl;
-							if (double.TryParse(folioEmisionStr, out double valFol)) folEmi = (int)valFol;
+							if (double.TryParse(idControlStr, out double _valCtrl)) idCtrl = (int)_valCtrl;
+							if (double.TryParse(folioEmisionStr, out double _valFol)) folEmi = (int)_valFol;
 
 							bool tieneLlavesExactas = (idCtrl > 0 && folEmi > 0);
 
@@ -413,7 +433,7 @@ namespace swCargaMasivaIngresos.Services
 							}
 							else if (aniosMultiples.Count > 0)
 							{
-								// 🚀 NUEVO BLOQUE: Desagrupador de Años Horizontales (Jopala)
+								// 🚀 BLOQUE: Desagrupador de Años Horizontales (Jopala)
 								clasePago = "1"; // Si paga años completos, es Anual
 								bimestre = "0";
 
@@ -427,7 +447,7 @@ namespace swCargaMasivaIngresos.Services
 									nuevaFila["Bimestre"] = bimestre;
 									nuevaFila["ImpuestoDeterminado"] = anioKvp.Value;
 
-									// 🚀 EL SECRETO: Inyectar el año de la deuda en la Fecha para que SQL lo acomode
+									// Inyectar el año de la deuda en la Fecha
 									string fechaVigOriginal = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
 									string fechaVigAjustada;
 
@@ -464,7 +484,7 @@ namespace swCargaMasivaIngresos.Services
 							}
 							else
 							{
-								// Layout Tradicional Vertical
+								// 🚀 BLOQUE: Layout Tradicional Vertical
 								if (string.IsNullOrWhiteSpace(bimestre)) bimestre = bimestreInferido;
 
 								if (string.IsNullOrWhiteSpace(bimestre) || bimestre == "99")
@@ -473,17 +493,6 @@ namespace swCargaMasivaIngresos.Services
 								}
 
 								if (clasePago == "1" && anioPredialStr == "-") continue;
-
-								// Extraemos llaves de cruce exacto ANTES de las barreras
-								int folEmi = 0;
-								string idControlStr = ExtraerSeguro(fila, mapaBloqueado, "IdControl", "").Replace(",", "").Trim();
-								string folioEmisionStr = ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", "").Replace(",", "").Trim();
-								int idCtrl = 0;
-
-								if (double.TryParse(idControlStr, out double valCtrl)) idCtrl = (int)valCtrl;
-								if (double.TryParse(folioEmisionStr, out double valFol)) folEmi = (int)valFol;
-
-								bool tieneLlavesExactas = (idCtrl > 0 && folEmi > 0);
 
 								// 🛑 BARRERA 1: Sin contexto en absoluto (Se perdona si hay llaves exactas)
 								if (clasePago == "99" && !tieneLlavesExactas)
@@ -516,7 +525,7 @@ namespace swCargaMasivaIngresos.Services
 
 								decimal impuestoAsignado;
 
-								// 🚀 NUEVA REGLA DE NEGOCIO: Control Estricto de Rangos
+								// 🚀 NUEVA REGLA DE NEGOCIO: Control Estricto de Rangos Verticales
 								if (aniosVerticales.Count > 1)
 								{
 									// Si es un rango (ej. 2022 AL 2025), mandamos el monto en 0. 
@@ -544,7 +553,7 @@ namespace swCargaMasivaIngresos.Services
 									nuevaFila["Bimestre"] = bimestre;
 									nuevaFila["ImpuestoDeterminado"] = impuestoAsignado; // Aplicamos el monto según la regla
 
-									// 🚀 AJUSTE DINÁMICO DE FECHA PARA ENGAÑAR A SQL Y ACOMODAR EL AÑO
+									// AJUSTE DINÁMICO DE FECHA
 									string fechaVigOriginal = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "").Trim();
 									string fechaVigAjustada;
 
@@ -556,7 +565,7 @@ namespace swCargaMasivaIngresos.Services
 									{
 										var dtOrig = DateTime.FromOADate(diasExcel);
 										int m = dtOrig.Month; int d = dtOrig.Day;
-										if (m == 2 && d == 29 && !DateTime.IsLeapYear(anioReportado)) d = 28; // Salvar bisiestos
+										if (m == 2 && d == 29 && !DateTime.IsLeapYear(anioReportado)) d = 28;
 										fechaVigAjustada = new DateTime(anioReportado, m, d).ToString("yyyy-MM-dd");
 									}
 									else if (DateTime.TryParse(fechaVigOriginal, new System.Globalization.CultureInfo("es-MX"), System.Globalization.DateTimeStyles.None, out DateTime fechaParseada))
