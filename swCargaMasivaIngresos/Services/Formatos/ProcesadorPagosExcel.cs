@@ -388,6 +388,10 @@ namespace swCargaMasivaIngresos.Services
 								{
 									clasePago = "1";
 								}
+								else
+								{
+									clasePago = "1";
+								}
 							}
 
 							// 5. ASIGNACIONES FINALES
