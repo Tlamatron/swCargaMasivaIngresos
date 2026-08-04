@@ -585,32 +585,72 @@ namespace swCargaMasivaIngresos.Services
 			}
 
 
-			void Asignar(string nombreOficial, params string[] sinonimos)
+			//void Asignar(string nombreOficial, params string[] sinonimos)
+			//{
+			//	foreach (var sin in sinonimos)
+			//	{
+			//		foreach (var kvp in mapaCrudo)
+			//		{
+			//			// Buscamos coincidencia ignorando espacios y mayúsculas
+			//			if (kvp.Key.Replace(" ", "").Contains(sin.Replace(" ", "")) && !columnasUsadas.Contains(kvp.Value))
+			//			{
+			//				oficial.Columnas[nombreOficial] = kvp.Value;
+			//				columnasUsadas.Add(kvp.Value); // 🔒 Se bloquea la columna
+			//				return;
+			//			}
+			//		}
+			//	}
+			//}
+
+			void Asignar(string nombreOficial, string[] sinonimos, string[] falsosPositivos = null)
 			{
 				foreach (var sin in sinonimos)
 				{
 					foreach (var kvp in mapaCrudo)
 					{
-						// Buscamos coincidencia ignorando espacios y mayúsculas
-						if (kvp.Key.Replace(" ", "").Contains(sin.Replace(" ", "")) && !columnasUsadas.Contains(kvp.Value))
+						if (columnasUsadas.Contains(kvp.Value)) continue;
+
+						string nombreCrudoLimpio = kvp.Key.Replace(" ", "").ToUpper();
+						string sinLimpio = sin.Replace(" ", "").ToUpper();
+
+						// Validar que coincida con el sinónimo
+						if (nombreCrudoLimpio.Contains(sinLimpio))
 						{
-							oficial.Columnas[nombreOficial] = kvp.Value;
-							columnasUsadas.Add(kvp.Value); // 🔒 Se bloquea la columna
-							return;
+							// Validar que NO contenga un falso positivo (Ej. "CUENTA PREDIAL PAGADA")
+							bool esFalsoPositivo = false;
+							if (falsosPositivos != null)
+							{
+								foreach (var fp in falsosPositivos)
+								{
+									if (nombreCrudoLimpio.Contains(fp.Replace(" ", "").ToUpper()))
+									{
+										esFalsoPositivo = true;
+										break;
+									}
+								}
+							}
+
+							if (!esFalsoPositivo)
+							{
+								oficial.Columnas[nombreOficial] = kvp.Value;
+								columnasUsadas.Add(kvp.Value); // 🔒 Se bloquea la columna
+								return; // Ya encontró su ganador, termina
+							}
 						}
 					}
 				}
 			}
 
+
 			// 🚀 1. PRIMERO ASEGURAMOS LOS METADATOS COMPUESTOS (El blindaje)
-			Asignar("ClasePago", "CLASE PAGO", "CLASE DE PAGO", "TIPO PAGO", "TIPO DE PAGO", "PAGO ANUAL O BIMESTRAL", "PAGO ANUAL/BIMESTRAL", "PERIODO DE PAGO");
-			Asignar("BimestreConsolidado", "BIMESTRE PAGADO", "BIMESTRE", "PERIODO", "MESES");
-			Asignar("ClaveMunicipio", "CLAVE DEL MUNICIPIO", "MUNICIPIO", "CVEMUN", "MPIO");
-			Asignar("TipoPredio", "TIPO DE PREDIO", "PREDIO", "TIPO", "DESC_PRED","T/P");
+			Asignar("ClasePago", new[] {"CLASE PAGO", "CLASE DE PAGO", "TIPO PAGO", "TIPO DE PAGO", "PAGO ANUAL O BIMESTRAL", "PAGO ANUAL/BIMESTRAL", "PERIODO DE PAGO"});
+			Asignar("BimestreConsolidado", new[] {"BIMESTRE PAGADO", "BIMESTRE", "PERIODO", "MESES"});
+			Asignar("ClaveMunicipio", new[] {"CLAVE DEL MUNICIPIO", "MUNICIPIO", "CVEMUN", "MPIO"});
+			Asignar("TipoPredio", new[] {"TIPO DE PREDIO", "PREDIO", "TIPO", "DESC_PRED","T/P"});
 
 			// 🚀 2. LAS COLUMNAS OBLIGATORIAS Y PRINCIPALES
-			Asignar("CuentaPredial", "CUENTA PREDIAL","NUMERO DE CUENTA", "NO. CUENTA", "CUENTA", "CTA", "CTA.", "CLAVE");
-			Asignar("Anio", "AÑO", "EJERCICIO", "EJERCICIO FISCAL");
+			Asignar("CuentaPredial", new[] {"CUENTA PREDIAL","NUMERO DE CUENTA", "NO. CUENTA", "CUENTA", "CTA", "CTA.", "CLAVE"});
+			Asignar("Anio", new[] {"AÑO", "EJERCICIO", "EJERCICIO FISCAL"});
 			// Obtenemos el año en curso para blindarlo a futuro
 			string anioActual = DateTime.Now.Year.ToString();
 			
@@ -686,34 +726,34 @@ namespace swCargaMasivaIngresos.Services
 			}
 
 
-			Asignar("FechaVigencia", "FECHA", "VIGENCIA");
-			Asignar("BaseGravable", "BASE GRAVABLE", "BASE", "VALOR CATASTRAL", "VALOR");
+			Asignar("FechaVigencia", new[] {"FECHA", "VIGENCIA"});
+			Asignar("BaseGravable", new[] {"BASE GRAVABLE", "BASE", "VALOR CATASTRAL", "VALOR"});
 
-			Asignar("IdControl", "NO_CONTROL", "NO CONTROL", "ID_CONTROL");
-			Asignar("FolioEmision", "FOLIO", "FOLIO_EMISION");
+			Asignar("IdControl", new[] {"NO_CONTROL", "NO CONTROL", "ID_CONTROL"});
+			Asignar("FolioEmision", new[] {"FOLIO", "FOLIO_EMISION"});
 
 			// 🚀 3. EL NUEVO ENTRENAMIENTO: TODA LA DEMOGRAFÍA OPCIONAL DEL PADRÓN
-			Asignar("FolioUnico", "FOLIO UNICO", "FOLIO ÚNICO", "FOLIO", "CONTROL", "NÚM. DE CONTROL", "NUM. DE CONTROL");
-			Asignar("Localidad", "LOCALIDAD", "POBLACION", "POBLACIÓN", "CIUDAD");
-			Asignar("Calle", "CALLE", "AVENIDA", "DIRECCION", "DIRECCIÓN", "DOMICILIO");
-			Asignar("NumExterior", "NÚM. EXT", "NUM. EXT", "NO. EXT", "EXTERIOR", "EXT");
-			Asignar("NumInterior", "NÚM. INT", "NUM. INT", "NO. INT", "INTERIOR", "INT");
-			Asignar("Letra", "LETRA", "LOTE", "MANZANA", "MZA");
-			Asignar("Colonia", "COLONIA", "BARRIO", "FRACCIONAMIENTO", "SECCION");
-			Asignar("CP", "CP", "C.P.", "CÓDIGO POSTAL", "CODIGO POSTAL");
+			Asignar("FolioUnico", new[] {"FOLIO UNICO", "FOLIO ÚNICO", "FOLIO", "CONTROL", "NÚM. DE CONTROL", "NUM. DE CONTROL"});
+			Asignar("Localidad", new[] {"LOCALIDAD", "POBLACION", "POBLACIÓN", "CIUDAD"});
+			Asignar("Calle", new[] {"CALLE", "AVENIDA", "DIRECCION", "DIRECCIÓN", "DOMICILIO"});
+			Asignar("NumExterior", new[] {"NÚM. EXT", "NUM. EXT", "NO. EXT", "EXTERIOR", "EXT"});
+			Asignar("NumInterior", new[] {"NÚM. INT", "NUM. INT", "NO. INT", "INTERIOR", "INT"});
+			Asignar("Letra", new[] {"LETRA", "LOTE", "MANZANA", "MZA"});
+			Asignar("Colonia", new[] {"COLONIA", "BARRIO", "FRACCIONAMIENTO", "SECCION"});
+			Asignar("CP", new[] {"CP", "C.P.", "CÓDIGO POSTAL", "CODIGO POSTAL"});
 
-			Asignar("Nombre", "NOMBRE", "PROPIETARIO", "CONTRIBUYENTE", "RAZON SOCIAL", "RAZÓN SOCIAL");
-			Asignar("PrimerApellido", "PRIMER APELLIDO", "APELLIDO PATERNO", "PATERNO", "APELLIDO 1");
-			Asignar("SegundoApellido", "SEGUNDO APELLIDO", "APELLIDO MATERNO", "MATERNO", "APELLIDO 2");
+			Asignar("Nombre", new[] {"NOMBRE", "PROPIETARIO", "CONTRIBUYENTE", "RAZON SOCIAL", "RAZÓN SOCIAL"});
+			Asignar("PrimerApellido", new[] {"PRIMER APELLIDO", "APELLIDO PATERNO", "PATERNO", "APELLIDO 1"});
+			Asignar("SegundoApellido", new[] {"SEGUNDO APELLIDO", "APELLIDO MATERNO", "MATERNO", "APELLIDO 2"});
 
-			Asignar("TipoPersona", "TIPO PERSONA", "TIPO DE PERSONA", "FISICA/MORAL", "FISICA MORAL");
-			Asignar("RFC", "RFC", "R.F.C.", "REGISTRO FEDERAL", "REGISTRO FEDERAL DEL CONTRIBUYENTE");
-			Asignar("ClaveRegimenSAT", "REGIMEN SAT", "RÉGIMEN SAT", "REGIMEN FISCAL", "CLAVE REGIMEN");
-			Asignar("ClaveUsoSAT", "USO SAT", "USO CFDI", "CLAVE USO");
-			Asignar("CPFiscalSAT", "CP FISCAL", "C.P. FISCAL", "CODIGO POSTAL FISCAL");
+			Asignar("TipoPersona", new[] {"TIPO PERSONA", "TIPO DE PERSONA", "FISICA/MORAL", "FISICA MORAL"});
+			Asignar("RFC", new[] {"RFC", "R.F.C.", "REGISTRO FEDERAL", "REGISTRO FEDERAL DEL CONTRIBUYENTE"});
+			Asignar("ClaveRegimenSAT", new[] {"REGIMEN SAT", "RÉGIMEN SAT", "REGIMEN FISCAL", "CLAVE REGIMEN"});
+			Asignar("ClaveUsoSAT", new[] {"USO SAT", "USO CFDI", "CLAVE USO"});
+			Asignar("CPFiscalSAT", new[] {"CP FISCAL", "C.P. FISCAL", "CODIGO POSTAL FISCAL"});
 
 			//Para el archivo de los descuentos.
-			Asignar("TipoReduccion", "TIPO DE REDUCCION", "TIPO DE REDUCCIÓN", "REDUCCION", "REDUCCIÓN", "DESCUENTO", "REDUCCI");
+			Asignar("TipoReduccion", new[] {"TIPO DE REDUCCION", "TIPO DE REDUCCIÓN", "REDUCCION", "REDUCCIÓN", "DESCUENTO", "REDUCCI"});
 
 			// Bimestres Sueltos
 			//string[] columnasBimestrales = { "1", "2", "3", "4", "5", "6", "B1", "B2", "B3", "B4", "B5", "B6" };
