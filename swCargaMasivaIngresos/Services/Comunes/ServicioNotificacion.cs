@@ -123,6 +123,51 @@ namespace swCargaMasivaIngresos.Services
 							// LÓGICA DE EXPORTACIÓN A CSV
 							if (resultado.RegistrosFallidos > 0)
 							{
+								// =========================================================================
+								// 🚀 1. NORMALIZACIÓN Y GUARDADO DE ERRORES EN SQL (BUSINESS INTELLIGENCE)
+								// =========================================================================
+								if (resultado.ErroresDetalle != null && resultado.ErroresDetalle.Count > 0)
+								{
+									// Agrupamos en memoria para no saturar la Base de Datos
+									var erroresAgrupados = resultado.ErroresDetalle
+										.Select(msg => NormalizarMensajeError(msg))
+										.GroupBy(msg => msg)
+										.Select(g => new {
+											Motivo = g.Key,
+											Cantidad = g.Count()
+										})
+										.ToList();
+
+									try
+									{
+										string cadenaConexion = System.Configuration.ConfigurationManager.ConnectionStrings["cnApolo"].ConnectionString;
+										using (System.Data.SqlClient.SqlConnection conn = new System.Data.SqlClient.SqlConnection(cadenaConexion))
+										{
+											await conn.OpenAsync();
+											foreach (var error in erroresAgrupados)
+											{
+												using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand("pred_Operacion.sp_RegistrarExcepcionAgrupada", conn))
+												{
+													cmd.CommandType = CommandType.StoredProcedure;
+													cmd.Parameters.AddWithValue("@FolioCarga", parametros.FolioCarga);
+													cmd.Parameters.AddWithValue("@MotivoRechazo", error.Motivo.Length > 500 ? error.Motivo.Substring(0, 497) + "..." : error.Motivo);
+													cmd.Parameters.AddWithValue("@Cantidad", error.Cantidad);
+													await cmd.ExecuteNonQueryAsync();
+												}
+											}
+										}
+									}
+									catch (Exception exSql)
+									{
+										// Si SQL falla, no detenemos el correo, solo lo anotamos en el log
+										await LogService.WriteLogAsync("ERROR", parametros.UsuarioLogin, "ServicioNotificacion", $"Fallo al guardar excepciones en BD: {exSql.Message}");
+									}
+								}
+
+								// =========================================================================
+								// 🚀 2. CREACIÓN DEL ARCHIVO CSV DETALLADO PARA EL USUARIO
+								// =========================================================================
+
 								sbBody.AppendLine("<h3>Detalle de Errores Encontrados:</h3>");
 								sbBody.AppendLine("<p>Se ha adjuntado un archivo CSV a este correo con el detalle completo de las filas rechazadas para su corrección.</p>");
 
@@ -278,6 +323,32 @@ namespace swCargaMasivaIngresos.Services
 			}
 
 			return valor;
+		}
+
+		/// <summary>
+		/// Función auxiliar que "borra" los datos variables de un mensaje de error (como el número de fila o la cuenta específica)
+		/// para permitir que errores idénticos se agrupen en una sola estadística.
+		/// </summary>
+		private static string NormalizarMensajeError(string mensajeOriginal)
+		{
+			if (string.IsNullOrWhiteSpace(mensajeOriginal)) return "Error desconocido";
+
+			string msg = mensajeOriginal;
+
+			// 1. Quitar números de cuenta específicos de la consolidación
+			// Ejemplo: "[Consolidación] Cuenta 13241: Error:" -> "[Consolidación] Cuenta [X]: Error:"
+			msg = System.Text.RegularExpressions.Regex.Replace(msg, @"(?i)(Cuenta\s+)\d+(:)", "$1[X]$2");
+
+			// 2. Quitar números de fila específicos de la validación estructural
+			// Ejemplo: "Fila 50 (Cuenta 100): Rechazado." -> "Fila [X] (Cuenta [X]): Rechazado."
+			msg = System.Text.RegularExpressions.Regex.Replace(msg, @"(?i)(Fila\s+|Línea\s+)\d+", "$1[X]");
+			msg = System.Text.RegularExpressions.Regex.Replace(msg, @"(?i)(Cuenta\s+)\d+(\))", "$1[X]$2");
+
+			// 3. Quitar cuentas que vienen puras
+			// Ejemplo: "Error: La cuenta predial 38522 NO EXISTE" -> "Error: La cuenta predial [X] NO EXISTE"
+			msg = System.Text.RegularExpressions.Regex.Replace(msg, @"(?i)(cuenta predial\s+)\w+", "$1[X]");
+
+			return msg.Trim();
 		}
 	}
 }
