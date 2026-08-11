@@ -2,9 +2,13 @@
 using swCargaMasivaIngresos.Services;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
+using System.IdentityModel.Tokens.Jwt;
 using System.Data;
 using System.Data.SqlClient;
+using System.Text;
 using System.Web.Http;
+using Microsoft.IdentityModel.Tokens;
 
 namespace swCargaMasivaIngresos.Controllers
 {
@@ -121,5 +125,71 @@ namespace swCargaMasivaIngresos.Controllers
 				return InternalServerError(ex);
 			}
 		}
+
+
+		/// <summary>
+		/// 🛡️ Valida matemáticamente que un Token SSO no haya sido alterado por un hacker
+		/// y que provenga de una aplicación permitida en el Web.config.
+		/// </summary>
+		[HttpPost]
+		[Route("ValidarTokenSSO")]
+		[AllowAnonymous]
+		public IHttpActionResult ValidarTokenSSO([FromBody] PeticionToken request)
+		{
+			if (request == null || string.IsNullOrWhiteSpace(request.Token))
+				return BadRequest("Token vacío.");
+
+			// 1. Leemos las reglas de seguridad del Web.config
+			string secretKey = ConfigurationManager.AppSettings["SsoSharedSecret"];
+			string aplicacionPermitida = ConfigurationManager.AppSettings["SsoAppOrigenPermitida"];
+
+			try
+			{
+				var tokenHandler = new JwtSecurityTokenHandler();
+				var key = Encoding.ASCII.GetBytes(secretKey);
+
+				// 2. Ejecutamos la validación criptográfica estricta
+				tokenHandler.ValidateToken(request.Token, new TokenValidationParameters
+				{
+					ValidateIssuerSigningKey = true,
+					IssuerSigningKey = new SymmetricSecurityKey(key),
+
+					// 🚀 Validamos que el nombre de la App origen sea el correcto
+					ValidateIssuer = true,
+					ValidIssuer = aplicacionPermitida,
+
+					ValidateAudience = false, // Puedes encenderlo si también validas para quién es el token
+
+					// Validamos que no esté caducado
+					ValidateLifetime = true,
+					ClockSkew = TimeSpan.Zero
+				}, out SecurityToken validatedToken);
+
+				// 3. Si llega a esta línea, el token es 100% auténtico y seguro.
+				var jwtToken = (JwtSecurityToken)validatedToken;
+
+				// Devolvemos el Payload (el cerebro del token) ya validado al Front-End
+				return Ok(new
+				{
+					Exito = true,
+					Payload = jwtToken.Payload
+				});
+			}
+			catch (SecurityTokenExpiredException)
+			{
+				return Unauthorized(); // "El token ha caducado."
+			}
+			catch (Exception ex)
+			{
+				// Si la firma matemática no coincide o la AppOrigen no es la permitida
+				Services.LogService.WriteLogAsync("WARN", "SSO", "SeguridadController", $"Intento de intrusión o token inválido: {ex.Message}").Wait();
+				return Unauthorized();
+			}
+		}
+	}
+
+	public class PeticionToken
+	{
+		public string Token { get; set; }
 	}
 }
