@@ -17,9 +17,11 @@ namespace swCargaMasivaIngresos
 			string[] originsArray = CorsSettings.GetCorsOrigins(ambiente);
 			string origins = string.Join(",", originsArray);
 
+			// Registrar el interceptor global de JWT
+			config.Filters.Add(new swCargaMasivaIngresos.JwtGlobalFilter());
 
 			// Forzar origen seguro si por alguna razón la llave no se encuentra
-			if (string.IsNullOrEmpty(origins)) origins = "https://wscargamasivaingresos.puebla.gob.mx";
+			if (string.IsNullOrEmpty(origins)) origins = "https://swcargamasivaingresos.puebla.gob.mx";
 
 			var cors = new EnableCorsAttribute(
 				origins,

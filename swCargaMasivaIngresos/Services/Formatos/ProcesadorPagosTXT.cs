@@ -1,9 +1,11 @@
 ﻿using swCargaMasivaIngresos.Models;
+using swCargaMasivaIngresos.Services.Comunes;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -96,25 +98,13 @@ namespace swCargaMasivaIngresos.Services
 						continue;
 					}
 
-					// Fallback Seguro de Municipio (Igual que en Padrón)
-					//if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
-					//{
-					//	if (param.ClaveMunicipioDestino > 0)
-					//	{
-					//		claveMun = (short)param.ClaveMunicipioDestino; // Cast explícito aplicado
-					//	}
-					//	else
-					//	{
-					//		MarcarError(resultado, numeroLinea, "Clave de municipio inválida (1 a 217).");
-					//		continue;
-					//	}
-					//}
+					
 					// Fallback Seguro de Municipio (Igual que en Padrón)
 					if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 					{
 						if (param.ClaveMunicipioDestino > 0)
 						{
-							claveMun = (short)param.ClaveMunicipioDestino; // 🚀 CAST EXPLÍCITO APLICADO
+							claveMun = (short)param.ClaveMunicipioDestino; 
 						}
 						else
 						{
@@ -172,8 +162,8 @@ namespace swCargaMasivaIngresos.Services
 						clasePago.ToString(),
 						impuestoDeterminadoDec,
 						DateTime.Now.ToString("yyyy-MM-dd"),
-						DBNull.Value, // 🚀 FALTABA: IdControl
-						DBNull.Value  // 🚀 FALTABA: FolioEmision
+						DBNull.Value, // FALTABA: IdControl
+						DBNull.Value  // FALTABA: FolioEmision
 					);
 
 					resultado.RegistrosExitosos++;
@@ -246,6 +236,27 @@ namespace swCargaMasivaIngresos.Services
 
 			try
 			{
+				string usuarioLogin = ContextoGlobal.UsuarioActual;
+
+				SeguridadService segService = new SeguridadService();
+				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
+				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ProcesarMergeEtiquetado", CadenaConexion, appId);
+
+				if (!estaAutorizado)
+				{
+					await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosTXT", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ProcesarMergeEtiquetado sin permisos.");
+
+					throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
+				}
+				estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ConsolidarAdeudos", CadenaConexion, appId);
+
+				if (!estaAutorizado)
+				{
+					await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosTXT", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ConsolidarAdeudos sin permisos.");
+
+					throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
+				}
+
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				{
 					await conn.OpenAsync();

@@ -1,6 +1,7 @@
 ﻿using Hangfire;
 using swCargaMasivaIngresos.Models;
 using swCargaMasivaIngresos.Services;
+using swCargaMasivaIngresos.Services.Comunes;
 using System;
 using System.Data;
 using System.IO;
@@ -21,8 +22,7 @@ namespace swCargaMasivaIngresos.Controllers
 		// Leemos la ruta desde el Web.config para que en Producción lo puedas cambiar fácilmente.
 		// Si no existe, usa la ruta por defecto.
 		private readonly string RutaDirectorio = System.Configuration.ConfigurationManager.AppSettings["RutaTemporalCargas"] ?? @"C:\CargasIngresos\Temporales\";
-		private readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "swCargaMasivaIngresos";
-
+		
 		/// <summary>
 		/// Recibe un fragmento de archivo y lo almacena temporalmente. 
 		/// Si es el último fragmento, ensambla el archivo completo y encola el procesamiento en segundo plano.
@@ -131,7 +131,7 @@ namespace swCargaMasivaIngresos.Controllers
 		/// <returns>Un objeto JSON con el estatus y los contadores actuales.</returns>
 		[HttpGet]
 		[Route("Estatus/{folioCarga:int}")]
-		public IHttpActionResult ConsultarEstatus(int folioCarga) // <-- Parámetro int
+		public async Task<IHttpActionResult> ConsultarEstatusAsync(int folioCarga) // <-- Parámetro int
 		{
 			if (folioCarga <= 0) return BadRequest("El folio es inválido.");
 
@@ -139,11 +139,24 @@ namespace swCargaMasivaIngresos.Controllers
 			{
 				string cadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+				string usuarioLogin = ContextoGlobal.UsuarioActual;
+				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
+				SeguridadService segService = new SeguridadService();
+				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ConsultarEstatusCarga", cadenaConexion, appId);
+
+				if (!estaAutorizado)
+				{
+					await LogService.WriteLogAsync("ERROR", usuarioLogin, "CargaMasivaController", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ConsultarEstatusCarga sin permisos.");
+
+					// Bloquear la petición devolviendo un HTTP 403 Forbidden
+					return Content(HttpStatusCode.Forbidden, new { Error = "Acceso denegado. No tienes los roles necesarios para ejecutar esta operación." });
+				}
+
 				using (var conn = new System.Data.SqlClient.SqlConnection(cadenaConexion))
 				using (var cmd = new System.Data.SqlClient.SqlCommand("pred_Operacion.sp_ConsultarEstatusCarga", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
-					cmd.Parameters.AddWithValue("@FolioCarga", folioCarga); // 🚀 Pasa como int
+					cmd.Parameters.AddWithValue("@FolioCarga", folioCarga);
 					conn.Open();
 
 					using (var reader = cmd.ExecuteReader())
@@ -152,7 +165,7 @@ namespace swCargaMasivaIngresos.Controllers
 						{
 							return Ok(new
 							{
-								Folio = Convert.ToInt32(reader["FolioCarga"]), // 🚀 Lo leemos como int
+								Folio = Convert.ToInt32(reader["FolioCarga"]),
 								Estatus = reader["Estatus"].ToString(),
 								Exitosos = Convert.ToInt32(reader["TotalExitosos"]),
 								Fallidos = Convert.ToInt32(reader["TotalFallidos"]),

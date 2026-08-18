@@ -30,7 +30,7 @@ namespace swCargaMasivaIngresos.Services.PDF
 				// TODO: Aquí diseñarás el Acta de Entrega final
 				doc.Add(new Paragraph("ACTA DE ENTREGA DE CREDENCIALES DE ACCESO"));
 				doc.Add(new Paragraph($"Usuario: {datos.NombreCompleto} (ID: {datos.idUsuario})"));
-				doc.Add(new Paragraph($"Municipio: {datos.ClaveMunicipio}"));
+				doc.Add(new Paragraph($"Municipio: {datos.Municipio}"));
 				doc.Add(new Paragraph($"Fecha: {datos.FechaEmision:dd/MM/yyyy}"));
 
 				doc.Close();

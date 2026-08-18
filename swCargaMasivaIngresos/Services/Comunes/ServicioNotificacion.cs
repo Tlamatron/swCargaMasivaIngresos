@@ -1,4 +1,5 @@
 ﻿using swCargaMasivaIngresos.Models;
+using swCargaMasivaIngresos.Services.Comunes;
 using System;
 using System.Data;
 using System.IO;
@@ -14,7 +15,6 @@ namespace swCargaMasivaIngresos.Services
 	/// </summary>
 	public static class ServicioNotificacion
 	{
-		private static readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
 
 		/// <summary>
 		/// Envía un correo de notificación al usuario después de procesar una carga masiva, incluyendo detalles del resultado y adjuntando un archivo CSV con los registros rechazados si es necesario. Implementa reintentos en caso de fallos en el envío SMTP y notifica a los administradores si el correo hacia el usuario final falla tras varios intentos.
@@ -141,6 +141,19 @@ namespace swCargaMasivaIngresos.Services
 									try
 									{
 										string cadenaConexion = System.Configuration.ConfigurationManager.ConnectionStrings["cnApolo"].ConnectionString;
+										string usuarioLogin = ContextoGlobal.UsuarioActual;
+
+										SeguridadService segService = new SeguridadService();
+										int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
+										bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_RegistrarExcepcionAgrupada", cadenaConexion, appId);
+
+										if (!estaAutorizado)
+										{
+											await LogService.WriteLogAsync("ERROR", usuarioLogin, "ServicioNotificacion", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_RegistrarExcepcionAgrupada sin permisos.");
+
+											throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
+										}
+
 										using (System.Data.SqlClient.SqlConnection conn = new System.Data.SqlClient.SqlConnection(cadenaConexion))
 										{
 											await conn.OpenAsync();

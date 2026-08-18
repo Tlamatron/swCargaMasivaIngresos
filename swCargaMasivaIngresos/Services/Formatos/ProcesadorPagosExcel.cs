@@ -1,11 +1,13 @@
 ﻿using ExcelDataReader;
 using swCargaMasivaIngresos.Models;
+using swCargaMasivaIngresos.Services.Comunes;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
@@ -1317,6 +1319,29 @@ namespace swCargaMasivaIngresos.Services
 		private async Task<List<string>> InsertarBulkAsync(DataTable lote, ParametrosCarga param)
 		{
 			var erroresConsolidacion = new List<string>();
+
+			string usuarioLogin = ContextoGlobal.UsuarioActual;
+			int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
+			SeguridadService segService = new SeguridadService();
+			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ProcesarMergeEtiquetado", CadenaConexion, appId);
+
+			if (!estaAutorizado)
+			{
+				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosExcel", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ProcesarMergeEtiquetado sin permisos.");
+
+				throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
+			}
+			
+			estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ConsolidarAdeudos", CadenaConexion, appId);
+
+			if (!estaAutorizado)
+			{
+				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosExcel", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ConsolidarAdeudos sin permisos.");
+
+				throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
+			}
+
+
 
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{

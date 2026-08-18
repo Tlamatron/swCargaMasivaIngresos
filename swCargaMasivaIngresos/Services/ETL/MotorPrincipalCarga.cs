@@ -16,8 +16,7 @@ namespace swCargaMasivaIngresos.Services
 	/// and to handle fatal file-read errors by populating ResultadoProceso with error details.</remarks>
 	public static class MotorPrincipalCarga
 	{
-		private static readonly string AppName = System.Configuration.ConfigurationManager.AppSettings["NombAplicacion"] ?? "APICargaMasivaIngresos";
-
+		
 		/// <summary>
 		/// Este es el método que Hangfire ejecutará de forma aislada e ininterrumpible
 		/// </summary>

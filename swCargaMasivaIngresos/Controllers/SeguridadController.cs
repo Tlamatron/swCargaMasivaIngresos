@@ -1,14 +1,17 @@
-﻿using swCargaMasivaIngresos.Models;
+﻿using Microsoft.IdentityModel.Tokens;
+using swCargaMasivaIngresos.Models;
 using swCargaMasivaIngresos.Services;
+using swCargaMasivaIngresos.Services.Comunes;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
-using System.IdentityModel.Tokens.Jwt;
 using System.Data;
 using System.Data.SqlClient;
+using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Text;
+using System.Threading.Tasks;
 using System.Web.Http;
-using Microsoft.IdentityModel.Tokens;
 
 namespace swCargaMasivaIngresos.Controllers
 {
@@ -27,7 +30,7 @@ namespace swCargaMasivaIngresos.Controllers
 		/// <returns>El perfil del usuario si es exitoso, o un error 401 si es incorrecto.</returns>
 		[HttpPost]
 		[Route("Login")]
-		public IHttpActionResult ValidarLogin([FromBody] LoginRequest request)
+		public async Task<IHttpActionResult> ValidarLoginAsync([FromBody] LoginRequest request)
 		{
 			if (request == null || string.IsNullOrWhiteSpace(request.Usuario) || string.IsNullOrWhiteSpace(request.Password))
 			{
@@ -36,6 +39,21 @@ namespace swCargaMasivaIngresos.Controllers
 
 			try
 			{
+				string usuarioLogin = ContextoGlobal.UsuarioActual;
+				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
+				SeguridadService segService = new SeguridadService();
+				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Seguridad.sp_ValidarUsuario", CadenaConexion, appId);
+
+				if (!estaAutorizado)
+				{
+					await LogService.WriteLogAsync("ERROR", usuarioLogin, "SeguridadController", $"El usuario {usuarioLogin} intentó ejecutar pred_Seguridad.sp_ValidarUsuario sin permisos.");
+
+					// Bloquear la petición devolviendo un HTTP 403 Forbidden
+					return Content(HttpStatusCode.Forbidden, new { Error = "Acceso denegado. No tienes los roles necesarios para ejecutar esta operación." });
+				}
+
+
+
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				using (SqlCommand cmd = new SqlCommand("pred_Seguridad.sp_ValidarUsuario", conn))
 				{
@@ -86,7 +104,7 @@ namespace swCargaMasivaIngresos.Controllers
 		/// <returns>Lista de objetos MenuDTO que representan el menú dinámico.</returns>
 		[HttpGet]
 		[Route("Menu")]
-		public IHttpActionResult ObtenerMenu(int appId, int rolId)
+		public async Task<IHttpActionResult> ObtenerMenuAsync(int appId, int rolId)
 		{
 			try
 			{
