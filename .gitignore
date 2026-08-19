@@ -15,4 +15,5 @@ CargasIngresos/Temporales/
 *.tmp
 
 # 1. Ignorar el archivo de CORS real (Se sube solo el Cors.config.example)
-Content/seguridad/Cors.config
+**/Content/seguridad/Cors.config
+**/Content/seguridad/Cifrado.md

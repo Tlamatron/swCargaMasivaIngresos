@@ -39,27 +39,15 @@ namespace swCargaMasivaIngresos.Controllers
 
 			try
 			{
-				string usuarioLogin = ContextoGlobal.UsuarioActual;
-				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
-				SeguridadService segService = new SeguridadService();
-				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Seguridad.sp_ValidarUsuario", CadenaConexion, appId);
-
-				if (!estaAutorizado)
-				{
-					await LogService.WriteLogAsync("ERROR", usuarioLogin, "SeguridadController", $"El usuario {usuarioLogin} intentó ejecutar pred_Seguridad.sp_ValidarUsuario sin permisos.");
-
-					// Bloquear la petición devolviendo un HTTP 403 Forbidden
-					return Content(HttpStatusCode.Forbidden, new { Error = "Acceso denegado. No tienes los roles necesarios para ejecutar esta operación." });
-				}
-
-
+				// 🚀 SE ELIMINÓ LA VALIDACIÓN DE SEGURIDAD AQUÍ
+				// Vamos directo a validar las credenciales contra la base de datos
 
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				using (SqlCommand cmd = new SqlCommand("pred_Seguridad.sp_ValidarUsuario", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.Parameters.AddWithValue("@UsuarioLogin", request.Usuario.Trim());
-					cmd.Parameters.AddWithValue("@Password", request.Password.Trim()); // Nota: En producción esto debería venir encriptado
+					cmd.Parameters.AddWithValue("@Password", request.Password.Trim());
 
 					conn.Open();
 
@@ -67,7 +55,6 @@ namespace swCargaMasivaIngresos.Controllers
 					{
 						if (reader.Read())
 						{
-							// Si el SP regresa datos, el login fue exitoso
 							var perfil = new UsuarioResponse
 							{
 								UsuarioLogin = reader["UsuarioLogin"].ToString(),
@@ -82,7 +69,6 @@ namespace swCargaMasivaIngresos.Controllers
 						}
 						else
 						{
-							// Si el SP no regresa nada, credenciales inválidas o usuario inactivo
 							return Unauthorized();
 						}
 					}
@@ -90,7 +76,6 @@ namespace swCargaMasivaIngresos.Controllers
 			}
 			catch (Exception ex)
 			{
-				// Registramos el error internamente y devolvemos 500
 				Services.LogService.WriteLogAsync("ERROR", request.Usuario, "SeguridadController", $"Fallo en Login: {ex.Message}").Wait();
 				return InternalServerError(ex);
 			}
