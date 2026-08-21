@@ -17,3 +17,9 @@ CargasIngresos/Temporales/
 # 1. Ignorar el archivo de CORS real (Se sube solo el Cors.config.example)
 **/Content/seguridad/Cors.config
 **/Content/seguridad/Cifrado.md
+
+# 🚀 2. Ignorar Proyectos Auxiliares (Encriptador)
+CryptoHelperv02/
+
+# 🚀 3. Seguridad: Ignorar Perfiles de Publicación (evita fugas de contraseñas de IIS/FTP)
+*.pubxml.user

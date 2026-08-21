@@ -316,6 +316,7 @@
     <Compile Include="Services\Infraestructura\ValidateJsonContentFilter.cs" />
     <Compile Include="Services\PDF\ServicioGeneradorHTMLtoPDF.cs" />
     <Compile Include="Startup.cs" />
+    <Compile Include="Utils\CryptoHelper.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Areas\HelpPage\HelpPage.css" />
@@ -356,7 +357,9 @@
     <Content Include="Areas\HelpPage\Views\Help\DisplayTemplates\CollectionModelDescription.cshtml" />
     <Content Include="Areas\HelpPage\Views\Help\DisplayTemplates\ApiGroup.cshtml" />
     <Content Include="Areas\HelpPage\Views\Help\Api.cshtml" />
-    <Content Include="Content\seguridad\Cors.config" />
+    <Content Include="Content\seguridad\Cors.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="Scripts\bootstrap.bundle.js" />
     <Content Include="Scripts\bootstrap.bundle.min.js" />
     <Content Include="Scripts\bootstrap.esm.js" />
