@@ -36,7 +36,7 @@ namespace swCargaMasivaIngresos.Services.Comunes
 			{
 				await conn.OpenAsync();
 
-				using (SqlCommand cmd = new SqlCommand("pred_Seguridad.sp_ValidarPermisoEjecucion", conn))
+				using (SqlCommand cmd = new SqlCommand("pred.sp_ValidarPermisoEjecucion", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.Parameters.AddWithValue("@UsuarioLogin", usuarioLogin);

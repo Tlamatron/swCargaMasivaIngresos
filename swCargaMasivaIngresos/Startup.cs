@@ -20,7 +20,7 @@ namespace swCargaMasivaIngresos
 			GlobalConfiguration.Configuration
 				.UseSqlServerStorage(cadenaConexionActiva, new SqlServerStorageOptions
 				{
-					SchemaName = "pred_HangFire", // 🚀 AQUÍ ESTÁ LA MAGIA PARA LOS ESQUEMAS
+					SchemaName = "pred", // 🚀 AQUÍ ESTÁ LA MAGIA PARA LOS ESQUEMAS
 					PrepareSchemaIfNecessary = true // Le permite a Hangfire crear sus tablas si no existen
 				});
 

@@ -19,7 +19,7 @@ namespace swCargaMasivaIngresos.Services
 		public static int GenerarFolio(int idTipoFolio)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
-			using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_GenerarFolio", conn))
+			using (SqlCommand cmd = new SqlCommand("pred.sp_GenerarFolio", conn))
 			{
 				cmd.CommandType = CommandType.StoredProcedure;
 
@@ -53,7 +53,7 @@ namespace swCargaMasivaIngresos.Services
 		public static void RegistrarInicio(int folioCarga, int oficinaId, string usuarioLogin, int tipoCargaId, int claveMunicipioDestino = 0)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
-			using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_RegistrarInicioCarga", conn))
+			using (SqlCommand cmd = new SqlCommand("pred.sp_RegistrarInicioCarga", conn))
 			{
 				cmd.CommandType = CommandType.StoredProcedure;
 				cmd.Parameters.AddWithValue("@FolioCarga", folioCarga);
@@ -78,7 +78,7 @@ namespace swCargaMasivaIngresos.Services
 		public static void ActualizarEstatus(int folioCarga, string estatus, int totalExitosos = 0, int totalFallidos = 0, string mensajeDetalle = null)
 		{
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
-			using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ActualizarEstatusCarga", conn))
+			using (SqlCommand cmd = new SqlCommand("pred.sp_ActualizarEstatusCarga", conn))
 			{
 				cmd.CommandType = CommandType.StoredProcedure;
 				cmd.Parameters.AddWithValue("@FolioCarga", folioCarga);

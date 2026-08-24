@@ -145,11 +145,11 @@ namespace swCargaMasivaIngresos.Services
 
 										SeguridadService segService = new SeguridadService();
 										int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
-										bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_RegistrarExcepcionAgrupada", cadenaConexion, appId);
+										bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_RegistrarExcepcionAgrupada", cadenaConexion, appId);
 
 										if (!estaAutorizado)
 										{
-											await LogService.WriteLogAsync("ERROR", usuarioLogin, "ServicioNotificacion", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_RegistrarExcepcionAgrupada sin permisos.");
+											await LogService.WriteLogAsync("ERROR", usuarioLogin, "ServicioNotificacion", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_RegistrarExcepcionAgrupada sin permisos.");
 
 											throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
 										}
@@ -159,7 +159,7 @@ namespace swCargaMasivaIngresos.Services
 											await conn.OpenAsync();
 											foreach (var error in erroresAgrupados)
 											{
-												using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand("pred_Operacion.sp_RegistrarExcepcionAgrupada", conn))
+												using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand("pred.sp_RegistrarExcepcionAgrupada", conn))
 												{
 													cmd.CommandType = CommandType.StoredProcedure;
 													cmd.Parameters.AddWithValue("@FolioCarga", parametros.FolioCarga);

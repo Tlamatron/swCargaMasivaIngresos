@@ -131,7 +131,7 @@ namespace swCargaMasivaIngresos.Controllers
 		/// <returns>Un objeto JSON con el estatus y los contadores actuales.</returns>
 		[HttpGet]
 		[Route("Estatus/{folioCarga:int}")]
-		public async Task<IHttpActionResult> ConsultarEstatusAsync(int folioCarga) // <-- Parámetro int
+		public async Task<IHttpActionResult> ConsultarEstatusAsync(int folioCarga)
 		{
 			if (folioCarga <= 0) return BadRequest("El folio es inválido.");
 
@@ -142,18 +142,18 @@ namespace swCargaMasivaIngresos.Controllers
 				string usuarioLogin = ContextoGlobal.UsuarioActual;
 				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
 				SeguridadService segService = new SeguridadService();
-				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ConsultarEstatusCarga", cadenaConexion, appId);
+				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ConsultarEstatusCarga", cadenaConexion, appId);
 
 				if (!estaAutorizado)
 				{
-					await LogService.WriteLogAsync("ERROR", usuarioLogin, "CargaMasivaController", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ConsultarEstatusCarga sin permisos.");
+					await LogService.WriteLogAsync("ERROR", usuarioLogin, "CargaMasivaController", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ConsultarEstatusCarga sin permisos.");
 
 					// Bloquear la petición devolviendo un HTTP 403 Forbidden
 					return Content(HttpStatusCode.Forbidden, new { Error = "Acceso denegado. No tienes los roles necesarios para ejecutar esta operación." });
 				}
 
 				using (var conn = new System.Data.SqlClient.SqlConnection(cadenaConexion))
-				using (var cmd = new System.Data.SqlClient.SqlCommand("pred_Operacion.sp_ConsultarEstatusCarga", conn))
+				using (var cmd = new System.Data.SqlClient.SqlCommand("pred.sp_ConsultarEstatusCarga", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.Parameters.AddWithValue("@FolioCarga", folioCarga);

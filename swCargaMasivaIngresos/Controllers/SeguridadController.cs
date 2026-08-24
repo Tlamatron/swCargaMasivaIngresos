@@ -43,7 +43,7 @@ namespace swCargaMasivaIngresos.Controllers
 				// Vamos directo a validar las credenciales contra la base de datos
 
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
-				using (SqlCommand cmd = new SqlCommand("pred_Seguridad.sp_ValidarUsuario", conn))
+				using (SqlCommand cmd = new SqlCommand("pred.sp_ValidarUsuario", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.Parameters.AddWithValue("@UsuarioLogin", request.Usuario.Trim());
@@ -96,7 +96,7 @@ namespace swCargaMasivaIngresos.Controllers
 				List<MenuDTO> listaMenus = new List<MenuDTO>();
 
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
-				using (SqlCommand cmd = new SqlCommand("pred_Seguridad.sp_ObtenerMenuDinamico", conn))
+				using (SqlCommand cmd = new SqlCommand("pred.sp_ObtenerMenuDinamico", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.Parameters.AddWithValue("@AppId", appId);

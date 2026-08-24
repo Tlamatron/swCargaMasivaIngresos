@@ -6,6 +6,8 @@ obj/
 .vs/
 *.user
 *.suo
+*.userosscache
+*.sln.docstates
 
 # Paquetes de NuGet
 packages/
@@ -14,12 +16,14 @@ packages/
 CargasIngresos/Temporales/
 *.tmp
 
-# 1. Ignorar el archivo de CORS real (Se sube solo el Cors.config.example)
+# 1. Ignorar el archivo de CORS real y llaves de cifrado
 **/Content/seguridad/Cors.config
 **/Content/seguridad/Cifrado.md
 
-# 🚀 2. Ignorar Proyectos Auxiliares (Encriptador)
+# 🚀 2. Ignorar el Proyecto Auxiliar de Encriptación
 CryptoHelperv02/
+CryptoHelperv02.zip
 
 # 🚀 3. Seguridad: Ignorar Perfiles de Publicación (evita fugas de contraseñas de IIS/FTP)
+*.pubxml
 *.pubxml.user

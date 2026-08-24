@@ -34,7 +34,7 @@ namespace swCargaMasivaIngresos.Controllers
 		//		if (reporte.FocosRojos == null) reporte.FocosRojos = new System.Collections.Generic.List<FocoRojo>();
 
 		//		using (SqlConnection conn = new SqlConnection(CadenaConexion))
-		//		using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ObtenerEstadisticasDashboard", conn))
+		//		using (SqlCommand cmd = new SqlCommand("pred.sp_ObtenerEstadisticasDashboard", conn))
 		//		{
 		//			cmd.CommandType = CommandType.StoredProcedure;
 
@@ -115,7 +115,7 @@ namespace swCargaMasivaIngresos.Controllers
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				{
 					await conn.OpenAsync();
-					using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ObtenerEstadisticasDashboard", conn))
+					using (SqlCommand cmd = new SqlCommand("pred.sp_ObtenerEstadisticasDashboard", conn))
 					{
 						cmd.CommandType = CommandType.StoredProcedure;
 

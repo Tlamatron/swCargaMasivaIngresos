@@ -240,19 +240,19 @@ namespace swCargaMasivaIngresos.Services
 
 				SeguridadService segService = new SeguridadService();
 				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
-				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ProcesarMergeEtiquetado", CadenaConexion, appId);
+				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergeEtiquetado", CadenaConexion, appId);
 
 				if (!estaAutorizado)
 				{
-					await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosTXT", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ProcesarMergeEtiquetado sin permisos.");
+					await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosTXT", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ProcesarMergeEtiquetado sin permisos.");
 
 					throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
 				}
-				estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ConsolidarAdeudos", CadenaConexion, appId);
+				estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ConsolidarAdeudos", CadenaConexion, appId);
 
 				if (!estaAutorizado)
 				{
-					await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosTXT", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ConsolidarAdeudos sin permisos.");
+					await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosTXT", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ConsolidarAdeudos sin permisos.");
 
 					throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
 				}
@@ -263,7 +263,7 @@ namespace swCargaMasivaIngresos.Services
 
 					using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 					{
-						bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
+						bulkCopy.DestinationTableName = "pred.Staging_Etiquetado";
 						bulkCopy.BatchSize = 10000;
 						bulkCopy.BulkCopyTimeout = 120;
 
@@ -283,7 +283,7 @@ namespace swCargaMasivaIngresos.Services
 					}
 
 					// PASO 2: Ingesta (Merge Original)
-					using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
+					using (SqlCommand cmd = new SqlCommand("pred.sp_ProcesarMergeEtiquetado", conn))
 					{
 						cmd.CommandType = CommandType.StoredProcedure;
 						cmd.CommandTimeout = 180;
@@ -292,7 +292,7 @@ namespace swCargaMasivaIngresos.Services
 					}
 
 					// 🚀 PASO 3: NUEVA CONSOLIDACIÓN Y CAPTURA DE ERRORES LÓGICOS
-					using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
+					using (SqlCommand cmdConsolidacion = new SqlCommand("pred.sp_ConsolidarAdeudos", conn))
 					{
 						cmdConsolidacion.CommandType = CommandType.StoredProcedure;
 						cmdConsolidacion.CommandTimeout = 180;

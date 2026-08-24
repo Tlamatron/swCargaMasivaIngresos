@@ -7,7 +7,6 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
@@ -79,14 +78,33 @@ namespace swCargaMasivaIngresos.Services
 						if (mapaCrudo.Count == 0) continue;
 
 						// NUEVA INFERENCIA: LEER EL MEMBRETE/ENCABEZADOS DEL ARCHIVO
+						string textoEncabezadoGlobal = "";
+						// 🚀 1. Variable para guardar el año si lo encontramos en el membrete
+						int? anioGlobalMembrete = null;
+
 						if (filaInicioDatos > 0)
 						{
-							string textoEncabezadoGlobal = "";
+							textoEncabezadoGlobal = "";
 							for (int r = 0; r < filaInicioDatos; r++)
 							{
 								var rowInfo = tablaExcel.Rows[r].ItemArray.Select(x => x?.ToString().Trim().ToUpper() ?? "");
 								textoEncabezadoGlobal += " " + string.Join(" ", rowInfo);
+
+								// 🚀 2. CAZADOR DE AÑO: Buscamos "EJERCICIO FISCAL" y leemos la celda de la derecha
+								for (int c = 0; c < tablaExcel.Columns.Count; c++)
+								{
+									string valorCelda = tablaExcel.Rows[r][c]?.ToString().ToUpper().Trim() ?? "";
+									if ((valorCelda == "EJERCICIO FISCAL" || valorCelda == "AÑO FISCAL") && c + 1 < tablaExcel.Columns.Count)
+									{
+										string posibleAnio = tablaExcel.Rows[r][c + 1]?.ToString().Trim();
+										if (int.TryParse(posibleAnio, out int anioMembreteDetectado))
+										{
+											anioGlobalMembrete = anioMembreteDetectado;
+										}
+									}
+								}
 							}
+
 
 							if (clasePagoInferida == "99")
 							{
@@ -243,7 +261,10 @@ namespace swCargaMasivaIngresos.Services
 
 							// 2. EXTRACCIÓN HISTÓRICA DE AÑOS PAGADOS (Como Lista Única)
 							string anioPredialStr = ExtraerSeguro(fila, mapaBloqueado, "Anio", "").ToUpper().Trim();
-							int anioFiscal = DateTime.Now.Year;
+
+							// 🚀 3. LA MAGIA: Si atrapamos el año arriba, lo usamos. Si no, usamos el año actual.
+							int anioFiscal = anioGlobalMembrete ?? DateTime.Now.Year;
+
 							List<int> aniosVerticales = new List<int>();
 
 							if (string.IsNullOrWhiteSpace(anioPredialStr))
@@ -1323,20 +1344,20 @@ namespace swCargaMasivaIngresos.Services
 			string usuarioLogin = ContextoGlobal.UsuarioActual;
 			int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
 			SeguridadService segService = new SeguridadService();
-			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ProcesarMergeEtiquetado", CadenaConexion, appId);
+			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergeEtiquetado", CadenaConexion, appId);
 
 			if (!estaAutorizado)
 			{
-				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosExcel", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ProcesarMergeEtiquetado sin permisos.");
+				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosExcel", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ProcesarMergeEtiquetado sin permisos.");
 
 				throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
 			}
 			
-			estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ConsolidarAdeudos", CadenaConexion, appId);
+			estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ConsolidarAdeudos", CadenaConexion, appId);
 
 			if (!estaAutorizado)
 			{
-				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosExcel", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ConsolidarAdeudos sin permisos.");
+				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosExcel", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ConsolidarAdeudos sin permisos.");
 
 				throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
 			}
@@ -1349,7 +1370,7 @@ namespace swCargaMasivaIngresos.Services
 
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
+					bulkCopy.DestinationTableName = "pred.Staging_Etiquetado";
 					bulkCopy.BatchSize = 10000;
 					bulkCopy.BulkCopyTimeout = 120;
 
@@ -1368,7 +1389,7 @@ namespace swCargaMasivaIngresos.Services
 					await bulkCopy.WriteToServerAsync(lote);
 				}
 
-				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
+				using (SqlCommand cmd = new SqlCommand("pred.sp_ProcesarMergeEtiquetado", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;
@@ -1376,7 +1397,7 @@ namespace swCargaMasivaIngresos.Services
 					await cmd.ExecuteNonQueryAsync();
 				}
 
-				using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
+				using (SqlCommand cmdConsolidacion = new SqlCommand("pred.sp_ConsolidarAdeudos", conn))
 				{
 					cmdConsolidacion.CommandType = CommandType.StoredProcedure;
 					cmdConsolidacion.CommandTimeout = 180;

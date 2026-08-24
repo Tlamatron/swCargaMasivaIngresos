@@ -129,11 +129,11 @@ namespace swCargaMasivaIngresos.Services.Formatos
 			string usuarioLogin = ContextoGlobal.UsuarioActual;
 			int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
 			SeguridadService segService = new SeguridadService();
-			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred_Operacion.sp_ProcesarMergeReducciones", CadenaConexion, appId);
+			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergeReducciones", CadenaConexion, appId);
 
 			if (!estaAutorizado)
 			{
-				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorReduccionesDBF", $"El usuario {usuarioLogin} intentó ejecutar pred_Operacion.sp_ProcesarMergeReducciones sin permisos.");
+				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorReduccionesDBF", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ProcesarMergeReducciones sin permisos.");
 
 				throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
 			}
@@ -145,13 +145,13 @@ namespace swCargaMasivaIngresos.Services.Formatos
 				await conn.OpenAsync();
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Reducciones";
+					bulkCopy.DestinationTableName = "pred.Staging_Reducciones";
 					bulkCopy.BatchSize = 10000;
 					foreach (DataColumn col in lote.Columns) bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
 					await bulkCopy.WriteToServerAsync(lote);
 				}
 
-				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeReducciones", conn))
+				using (SqlCommand cmd = new SqlCommand("pred.sp_ProcesarMergeReducciones", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;

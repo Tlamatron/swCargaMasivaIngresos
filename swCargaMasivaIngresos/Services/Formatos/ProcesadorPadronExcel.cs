@@ -235,7 +235,7 @@ namespace swCargaMasivaIngresos.Services
 				// PASO 1: Inserción Masiva a Staging
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Predial";
+					bulkCopy.DestinationTableName = "pred.Staging_Predial";
 					bulkCopy.BatchSize = 10000;
 					bulkCopy.BulkCopyTimeout = 120;
 
@@ -270,7 +270,7 @@ namespace swCargaMasivaIngresos.Services
 				}
 
 				// PASO 2: Ingesta a PadronDestino (SP Original)
-				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergePadron", conn))
+				using (SqlCommand cmd = new SqlCommand("pred.sp_ProcesarMergePadron", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;
@@ -279,7 +279,7 @@ namespace swCargaMasivaIngresos.Services
 				}
 
 				// 🚀 PASO 3: NUEVA CONSOLIDACIÓN Y CAPTURA DE ERRORES LÓGICOS
-				using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
+				using (SqlCommand cmdConsolidacion = new SqlCommand("pred.sp_ConsolidarAdeudos", conn))
 				{
 					cmdConsolidacion.CommandType = CommandType.StoredProcedure;
 					cmdConsolidacion.CommandTimeout = 180;

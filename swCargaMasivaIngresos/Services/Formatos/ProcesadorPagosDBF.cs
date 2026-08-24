@@ -149,20 +149,20 @@ namespace swCargaMasivaIngresos.Services.Formatos
 				await conn.OpenAsync();
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred_Operacion.Staging_Etiquetado";
+					bulkCopy.DestinationTableName = "pred.Staging_Etiquetado";
 					bulkCopy.BatchSize = 10000;
 					foreach (DataColumn col in lote.Columns) bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
 					await bulkCopy.WriteToServerAsync(lote);
 				}
 
-				using (SqlCommand cmd = new SqlCommand("pred_Operacion.sp_ProcesarMergeEtiquetado", conn))
+				using (SqlCommand cmd = new SqlCommand("pred.sp_ProcesarMergeEtiquetado", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
 					await cmd.ExecuteNonQueryAsync();
 				}
 
-				using (SqlCommand cmdConsolidacion = new SqlCommand("pred_Operacion.sp_ConsolidarAdeudos", conn))
+				using (SqlCommand cmdConsolidacion = new SqlCommand("pred.sp_ConsolidarAdeudos", conn))
 				{
 					cmdConsolidacion.CommandType = CommandType.StoredProcedure;
 					cmdConsolidacion.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
