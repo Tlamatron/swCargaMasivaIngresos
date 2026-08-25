@@ -126,7 +126,7 @@ namespace swCargaMasivaIngresos.Services.Formatos
 		{
 			var errores = new List<string>();
 
-			string usuarioLogin = ContextoGlobal.UsuarioActual;
+			string usuarioLogin = param.UsuarioLogin;
 			int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
 			SeguridadService segService = new SeguridadService();
 			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergeReducciones", CadenaConexion, appId);
@@ -145,7 +145,7 @@ namespace swCargaMasivaIngresos.Services.Formatos
 				await conn.OpenAsync();
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred.Staging_Reducciones";
+					bulkCopy.DestinationTableName = "pred.p_staging_reducciones";
 					bulkCopy.BatchSize = 10000;
 					foreach (DataColumn col in lote.Columns) bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
 					await bulkCopy.WriteToServerAsync(lote);

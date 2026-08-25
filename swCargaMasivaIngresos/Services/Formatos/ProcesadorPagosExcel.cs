@@ -94,12 +94,18 @@ namespace swCargaMasivaIngresos.Services
 								for (int c = 0; c < tablaExcel.Columns.Count; c++)
 								{
 									string valorCelda = tablaExcel.Rows[r][c]?.ToString().ToUpper().Trim() ?? "";
-									if ((valorCelda == "EJERCICIO FISCAL" || valorCelda == "AÑO FISCAL") && c + 1 < tablaExcel.Columns.Count)
+									if (valorCelda == "EJERCICIO FISCAL" || valorCelda == "AÑO FISCAL")
 									{
-										string posibleAnio = tablaExcel.Rows[r][c + 1]?.ToString().Trim();
-										if (int.TryParse(posibleAnio, out int anioMembreteDetectado))
+										// 🚀 FIX: Los Exceles tienen celdas vacías por combinación (Merge). 
+										// Escaneamos hasta 3 celdas hacia la derecha buscando el año.
+										for (int k = c + 1; k <= c + 3 && k < tablaExcel.Columns.Count; k++)
 										{
-											anioGlobalMembrete = anioMembreteDetectado;
+											string posibleAnio = tablaExcel.Rows[r][k]?.ToString().Trim();
+											if (int.TryParse(posibleAnio, out int anioMembreteDetectado) && anioMembreteDetectado > 1900)
+											{
+												anioGlobalMembrete = anioMembreteDetectado;
+												break; // Detenemos la búsqueda al encontrarlo
+											}
 										}
 									}
 								}
@@ -137,40 +143,7 @@ namespace swCargaMasivaIngresos.Services
 								tipoPredioInferido = "1";
 							}
 						}
-						//if (filaInicioDatos > 0)
-						//{
-						//	string textoEncabezadoGlobal = "";
-						//	for (int r = 0; r < filaInicioDatos; r++)
-						//	{
-						//		var rowInfo = tablaExcel.Rows[r].ItemArray.Select(x => x?.ToString().Trim().ToUpper() ?? "");
-						//		textoEncabezadoGlobal += " " + string.Join(" ", rowInfo);
-						//	}
-
-						//	if (clasePagoInferida == "99")
-						//	{
-						//		if (textoEncabezadoGlobal.Contains("BIMESTRAL") || textoEncabezadoGlobal.Contains("BIMESTRE") || textoEncabezadoGlobal.Contains("BIM"))
-						//		{
-						//			clasePagoInferida = "2";
-						//		}
-						//		else if (textoEncabezadoGlobal.Contains("ANUAL"))
-						//		{
-						//			clasePagoInferida = "1";
-						//		}
-						//	}
-
-						//	if (textoEncabezadoGlobal.Contains("SUBURBANO") || textoEncabezadoGlobal.Contains("SUB-URBANO") || textoEncabezadoGlobal.Contains("SUB URBANO"))
-						//	{
-						//		tipoPredioInferido = "3";
-						//	}
-						//	else if (textoEncabezadoGlobal.Contains("RUSTICO") || textoEncabezadoGlobal.Contains("RÚSTICO"))
-						//	{
-						//		tipoPredioInferido = "2";
-						//	}
-						//	else if (textoEncabezadoGlobal.Contains("URBANO"))
-						//	{
-						//		tipoPredioInferido = "1";
-						//	}
-						//}
+						
 
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
 						DataTable tablaCrudos = CrearEstructuraRaw();
@@ -676,12 +649,25 @@ namespace swCargaMasivaIngresos.Services
 
 						if (resultadoLimpieza.TablaValidos.Rows.Count > 0)
 						{
-							List<string> erroresLogicos = await InsertarBulkAsync(resultadoLimpieza.TablaValidos, param);
-							if (erroresLogicos.Any())
+							List<string> mensajesConsolidacion = await InsertarBulkAsync(resultadoLimpieza.TablaValidos, param);
+
+							if (mensajesConsolidacion.Any())
 							{
-								resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
-								resultadoFinal.RegistrosFallidos += erroresLogicos.Count;
-								resultadoFinal.RegistrosExitosos -= erroresLogicos.Count;
+								int erroresReales = 0;
+								foreach (var msg in mensajesConsolidacion)
+								{
+									resultadoFinal.ErroresDetalle.Add(msg);
+
+									// 🚀 MATEMÁTICAS HONESTAS: Solo restamos éxito si la BD dice que fue un Error o un Bloqueo
+									if (msg.Contains("Error") || msg.Contains("Bloqueo"))
+									{
+										erroresReales++;
+									}
+								}
+
+								// Solo castigamos los contadores con los errores de verdad
+								resultadoFinal.RegistrosFallidos += erroresReales;
+								resultadoFinal.RegistrosExitosos -= erroresReales;
 							}
 						}
 
@@ -1341,7 +1327,7 @@ namespace swCargaMasivaIngresos.Services
 		{
 			var erroresConsolidacion = new List<string>();
 
-			string usuarioLogin = ContextoGlobal.UsuarioActual;
+			string usuarioLogin = param.UsuarioLogin;
 			int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
 			SeguridadService segService = new SeguridadService();
 			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergeEtiquetado", CadenaConexion, appId);
@@ -1370,7 +1356,7 @@ namespace swCargaMasivaIngresos.Services
 
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred.Staging_Etiquetado";
+					bulkCopy.DestinationTableName = "pred.p_staging_etiquetado";
 					bulkCopy.BatchSize = 10000;
 					bulkCopy.BulkCopyTimeout = 120;
 

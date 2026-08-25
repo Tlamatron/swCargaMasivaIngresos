@@ -148,7 +148,6 @@ namespace swCargaMasivaIngresos.Controllers
 				{
 					await LogService.WriteLogAsync("ERROR", usuarioLogin, "CargaMasivaController", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ConsultarEstatusCarga sin permisos.");
 
-					// Bloquear la petición devolviendo un HTTP 403 Forbidden
 					return Content(HttpStatusCode.Forbidden, new { Error = "Acceso denegado. No tienes los roles necesarios para ejecutar esta operación." });
 				}
 

@@ -172,7 +172,7 @@ namespace swCargaMasivaIngresos.Services
 		private async Task<List<string>> InsertarBulkAsync(DataTable lote, ParametrosCarga param)
 		{
 			var errores = new List<string>();
-			string usuarioLogin = ContextoGlobal.UsuarioActual;
+			string usuarioLogin = param.UsuarioLogin;
 
 			SeguridadService segService = new SeguridadService();
 			int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
@@ -192,7 +192,7 @@ namespace swCargaMasivaIngresos.Services
 				// PASO 1: Inserción Masiva a Staging
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred.Staging_Reducciones";
+					bulkCopy.DestinationTableName = "pred.p_staging_reducciones";
 					bulkCopy.BatchSize = 10000;
 					bulkCopy.BulkCopyTimeout = 120;
 

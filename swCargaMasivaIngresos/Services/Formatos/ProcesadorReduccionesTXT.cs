@@ -228,7 +228,7 @@ namespace swCargaMasivaIngresos.Services
 			var errores = new List<string>();
 			try
 			{
-				string usuarioLogin = ContextoGlobal.UsuarioActual;
+				string usuarioLogin = param.UsuarioLogin;
 
 				SeguridadService segService = new SeguridadService();
 				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
@@ -248,7 +248,7 @@ namespace swCargaMasivaIngresos.Services
 
 					using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 					{
-						bulkCopy.DestinationTableName = "pred.Staging_Reducciones";
+						bulkCopy.DestinationTableName = "pred.p_staging_reducciones";
 						bulkCopy.BatchSize = 10000;
 						bulkCopy.BulkCopyTimeout = 120;
 

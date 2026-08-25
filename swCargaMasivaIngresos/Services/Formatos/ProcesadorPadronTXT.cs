@@ -1,4 +1,5 @@
 ﻿using swCargaMasivaIngresos.Models;
+using swCargaMasivaIngresos.Services.Comunes;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -309,6 +310,14 @@ namespace swCargaMasivaIngresos.Services
 
 			try
 			{
+				// 🚀 IMPLEMENTACIÓN DE SEGURIDAD (Usuario inyectado desde parámetros)
+				string usuarioLogin = param.UsuarioLogin;
+				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
+				SeguridadService segService = new SeguridadService();
+
+				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergePadron", CadenaConexion, appId);
+				if (!estaAutorizado) throw new UnauthorizedAccessException("Acceso denegado.");
+
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				{
 					await conn.OpenAsync();
@@ -316,7 +325,7 @@ namespace swCargaMasivaIngresos.Services
 					// PASO 1: Inyectar masivamente a la tabla Staging
 					using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 					{
-						bulkCopy.DestinationTableName = "pred.Staging_Predial";
+						bulkCopy.DestinationTableName = "pred.p_staging_predial";
 						bulkCopy.BatchSize = 10000;
 						bulkCopy.BulkCopyTimeout = 120;
 						await bulkCopy.WriteToServerAsync(lote);
