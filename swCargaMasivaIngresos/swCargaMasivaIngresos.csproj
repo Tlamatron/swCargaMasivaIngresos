@@ -281,7 +281,6 @@
     <Compile Include="Models\SeguridadModels.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\Comunes\ContextoGlobal.cs" />
-    <Compile Include="Services\Comunes\SeguridadService.cs" />
     <Compile Include="Services\Configuracion\ConfiguracionApp.cs" />
     <Compile Include="Services\Configuracion\ConfiguracionWSService.cs" />
     <Compile Include="Services\Comunes\ControlCargasService.cs" />

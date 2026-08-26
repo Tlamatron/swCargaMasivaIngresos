@@ -143,17 +143,6 @@ namespace swCargaMasivaIngresos.Services
 										string cadenaConexion = System.Configuration.ConfigurationManager.ConnectionStrings["cnApolo"].ConnectionString;
 										string usuarioLogin = ContextoGlobal.UsuarioActual;
 
-										SeguridadService segService = new SeguridadService();
-										int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
-										bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_RegistrarExcepcionAgrupada", cadenaConexion, appId);
-
-										if (!estaAutorizado)
-										{
-											await LogService.WriteLogAsync("ERROR", usuarioLogin, "ServicioNotificacion", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_RegistrarExcepcionAgrupada sin permisos.");
-
-											throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
-										}
-
 										using (System.Data.SqlClient.SqlConnection conn = new System.Data.SqlClient.SqlConnection(cadenaConexion))
 										{
 											await conn.OpenAsync();

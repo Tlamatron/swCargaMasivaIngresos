@@ -140,17 +140,7 @@ namespace swCargaMasivaIngresos.Controllers
 				string cadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 				string usuarioLogin = ContextoGlobal.UsuarioActual;
-				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
-				SeguridadService segService = new SeguridadService();
-				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ConsultarEstatusCarga", cadenaConexion, appId);
-
-				if (!estaAutorizado)
-				{
-					await LogService.WriteLogAsync("ERROR", usuarioLogin, "CargaMasivaController", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ConsultarEstatusCarga sin permisos.");
-
-					return Content(HttpStatusCode.Forbidden, new { Error = "Acceso denegado. No tienes los roles necesarios para ejecutar esta operación." });
-				}
-
+				
 				using (var conn = new System.Data.SqlClient.SqlConnection(cadenaConexion))
 				using (var cmd = new System.Data.SqlClient.SqlCommand("pred.sp_ConsultarEstatusCarga", conn))
 				{
