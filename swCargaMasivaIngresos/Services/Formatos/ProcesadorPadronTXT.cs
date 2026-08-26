@@ -79,22 +79,6 @@ namespace swCargaMasivaIngresos.Services
 					// ====================================================================
 					// 🚀 NUEVO: VALIDACIÓN ESTRICTA DE TIPOS NUMÉRICOS Y CATÁLOGOS
 					// ====================================================================
-
-					// Columna 1: Clave Municipio (Obligatorio, numérico de 1 a 217)
-					//if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
-					//{
-					//	// Fallback de seguridad (Opcional, pero recomendado en TXT también)
-					//	if (param.ClaveMunicipioDestino > 0)
-					//	{
-					//		claveMun = (short)param.ClaveMunicipioDestino;
-					//	}
-					//	else
-					//	{
-					//		MarcarError(resultado, numeroLinea, "Clave de municipio inválida (Debe ser numérico entre 1 y 217).");
-					//		continue;
-					//	}
-					//}
-					// Fallback Seguro de Municipio (Igual que en Padrón)
 					if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 					{
 						if (param.ClaveMunicipioDestino > 0)
@@ -312,12 +296,6 @@ namespace swCargaMasivaIngresos.Services
 			{
 				// 🚀 IMPLEMENTACIÓN DE SEGURIDAD (Usuario inyectado desde parámetros)
 				string usuarioLogin = param.UsuarioLogin;
-				int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
-				SeguridadService segService = new SeguridadService();
-
-				bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergePadron", CadenaConexion, appId);
-				if (!estaAutorizado) throw new UnauthorizedAccessException("Acceso denegado.");
-
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				{
 					await conn.OpenAsync();

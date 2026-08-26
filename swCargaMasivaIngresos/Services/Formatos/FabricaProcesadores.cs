@@ -1,5 +1,6 @@
 ﻿using swCargaMasivaIngresos.Services.Formatos;
 using System;
+using System.Security.Cryptography;
 
 namespace swCargaMasivaIngresos.Services
 {
@@ -28,6 +29,7 @@ namespace swCargaMasivaIngresos.Services
 					case 1: return new ProcesadorPadronTXT();
 					case 2: return new ProcesadorPagosUniversal(); 
 					case 3: return new ProcesadorReduccionesTXT();
+					case 4: return new ProcesadorPorPagarTXT();
 					default: throw new NotSupportedException($"El TipoCargaId '{tipoCargaId}' no existe en texto.");
 				}
 			}
@@ -40,6 +42,7 @@ namespace swCargaMasivaIngresos.Services
 					case 1: return new ProcesadorPadronExcel();
 					case 2: return new ProcesadorPagosExcel(); 
 					case 3: return new ProcesadorReduccionesExcel();
+					case 4: return new ProcesadorPorPagarExcel();
 					default: throw new NotSupportedException($"El TipoCargaId '{tipoCargaId}' no existe en Excel.");
 				}
 			}
@@ -51,7 +54,8 @@ namespace swCargaMasivaIngresos.Services
 				{
 					case 1: return new ProcesadorPadronDBF();
 					case 2: return new ProcesadorPagosDBF();
-					case 3: return new ProcesadorReduccionesDBF(); 
+					case 3: return new ProcesadorReduccionesDBF();
+					case 4: return new ProcesadorPorPagarDBF();
 					default: throw new NotSupportedException($"El TipoCargaId '{tipoCargaId}' no está soportado para archivos DBF.");
 				}
 			}

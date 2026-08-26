@@ -7,22 +7,20 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Threading.Tasks;
 
-namespace swCargaMasivaIngresos.Services
+namespace swCargaMasivaIngresos.Services.Formatos
 {
 	/// <summary>
-	/// Clase encargada de procesar archivos Excel que contienen información de reducciones (descuentos).
-	/// Implementa IProcesadorFormato de manera asíncrona.
+	/// Clase encargada de procesar archivos de exclusión "Por Pagar".
+	/// Extrae las cuentas pendientes reportadas por el municipio para que el sistema asuma que el resto ya fue pagado.
 	/// </summary>
-	public class ProcesadorReduccionesExcel : IProcesadorFormato
+	public class ProcesadorPorPagarExcel : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
-		/// Método principal asíncrono para procesar un archivo Excel de reducciones. 
-		/// Extrae los datos, aplica las reglas de validación y realiza la inserción masiva.
+		/// Procesa un archivo Excel de exclusión "Por Pagar" y lo inserta en la base de datos.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <param name="param"></param>
@@ -31,7 +29,7 @@ namespace swCargaMasivaIngresos.Services
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
 
-			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorReduccionesExcel", $"Iniciando Lectura Inteligente de Descuentos. Folio: {param.FolioCarga}").Wait();
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPorPagarExcel", $"Iniciando Lectura de archivo Por Pagar. Folio: {param.FolioCarga}").Wait();
 
 			try
 			{
@@ -51,14 +49,14 @@ namespace swCargaMasivaIngresos.Services
 						if (mapaCrudo.Count == 0) continue;
 
 						var mapaBloqueado = MapeadorInteligente.ProcesarEncabezadosConMemoria(mapaCrudo);
-						DataTable tablaCrudos = CrearEstructuraReducciones();
+						DataTable tablaCrudos = CrearEstructuraPorPagar();
 
 						for (int i = filaInicioDatos; i < tablaExcel.Rows.Count; i++)
 						{
 							var fila = tablaExcel.Rows[i];
 							if (string.IsNullOrWhiteSpace(string.Join("", fila.ItemArray))) continue;
 
-							// 🚀 EXTRACCIÓN SEGURA (No importa el orden ni si faltan columnas como Folio Único)
+							// 1. Extracción de Llaves Primarias
 							string cuentaPredial = ExtraerSeguro(fila, mapaBloqueado, "CuentaPredial", "");
 							if (string.IsNullOrWhiteSpace(cuentaPredial) || cuentaPredial.Equals("Cuenta", StringComparison.OrdinalIgnoreCase)) continue;
 							if (cuentaPredial.EndsWith(".0")) cuentaPredial = cuentaPredial.Replace(".0", "");
@@ -69,18 +67,12 @@ namespace swCargaMasivaIngresos.Services
 							else if (tipoPredio == "S" || tipoPredio.StartsWith("SUBURBANO") || tipoPredio.StartsWith("SUB")) tipoPredio = "3";
 							if (string.IsNullOrWhiteSpace(tipoPredio)) tipoPredio = "1";
 
-							// 🚀 FALLBACK SEGURO DE MUNICIPIO (Manejado como cadena para parseo posterior)
 							string claveMunicipio = ExtraerSeguro(fila, mapaBloqueado, "ClaveMunicipio", "");
 							if (string.IsNullOrWhiteSpace(claveMunicipio) && param != null)
 							{
 								claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
 							}
 
-							string folioUnico = ExtraerSeguro(fila, mapaBloqueado, "FolioUnico", "");
-							string tipoReduccion = ExtraerSeguro(fila, mapaBloqueado, "TipoReduccion", "").Trim();
-							if (tipoReduccion.EndsWith(".0")) tipoReduccion = tipoReduccion.Replace(".0", "");
-
-							// 🚀 VALIDACIONES DE NEGOCIO
 							if (!short.TryParse(claveMunicipio, out short claveMun) || claveMun < 1 || claveMun > 217)
 							{
 								resultadoFinal.RegistrosFallidos++;
@@ -88,34 +80,53 @@ namespace swCargaMasivaIngresos.Services
 								continue;
 							}
 
-							if (!byte.TryParse(tipoReduccion, out byte tipoRed) || tipoRed < 1)
-							{
-								resultadoFinal.RegistrosFallidos++;
-								resultadoFinal.ErroresDetalle.Add($"Fila {i + 1}: Tipo de Reducción inválido. Valor encontrado: '{tipoReduccion}'. Debe ser numérico.");
-								continue;
-							}
+							// 2. Extracción de Metadatos (Opcionales en este tipo de carga, pero útiles)
+							string fechaVigencia = ExtraerSeguro(fila, mapaBloqueado, "FechaVigencia", "");
+							if (string.IsNullOrWhiteSpace(fechaVigencia)) fechaVigencia = new DateTime(DateTime.Now.Year, 12, 31).ToString("yyyy-MM-dd");
 
 							DataRow nuevaFila = tablaCrudos.NewRow();
 							nuevaFila["ClaveMunicipio"] = claveMun.ToString();
 							nuevaFila["TipoPredio"] = tipoPredio;
 							nuevaFila["CuentaPredial"] = cuentaPredial;
-							nuevaFila["FolioUnico"] = Utilerias.LimpiarCadena(folioUnico, 50);
-							nuevaFila["TipoReduccion"] = tipoRed.ToString();
+							nuevaFila["Bimestre"] = ExtraerSeguro(fila, mapaBloqueado, "Bimestre", "0");
 							nuevaFila["FolioCarga"] = param.FolioCarga;
+
+							string imp = ExtraerSeguro(fila, mapaBloqueado, "ImpuestoDeterminado", "0");
+							decimal.TryParse(imp.Replace("$", "").Replace(",", ""), out decimal impDec);
+							nuevaFila["ImpuestoDeterminado"] = impDec;
+
+							nuevaFila["ClasePago"] = ExtraerSeguro(fila, mapaBloqueado, "ClasePago", "1");
+							nuevaFila["FechaVigencia"] = fechaVigencia;
+
+							if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "IdControl", ""), out int idCtrl)) nuevaFila["IdControl"] = idCtrl;
+							else nuevaFila["IdControl"] = DBNull.Value;
+
+							if (int.TryParse(ExtraerSeguro(fila, mapaBloqueado, "FolioEmision", ""), out int folEmi)) nuevaFila["FolioEmision"] = folEmi;
+							else nuevaFila["FolioEmision"] = DBNull.Value;
 
 							tablaCrudos.Rows.Add(nuevaFila);
 						}
 
-						// 🚀 EJECUCIÓN ASÍNCRONA A BASE DE DATOS CON MATEMÁTICAS HONESTAS
+						// 3. Volcado a Base de Datos
 						if (tablaCrudos.Rows.Count > 0)
 						{
-							List<string> erroresLogicos = await InsertarBulkAsync(tablaCrudos, param);
+							List<string> alertasSP = await InsertarBulkAsync(tablaCrudos, param);
 
-							if (erroresLogicos.Any())
+							if (alertasSP.Any())
 							{
-								resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
-								resultadoFinal.RegistrosFallidos += erroresLogicos.Count;
-								resultadoFinal.RegistrosExitosos += (tablaCrudos.Rows.Count - erroresLogicos.Count);
+								int erroresReales = 0;
+								foreach (var msg in alertasSP)
+								{
+									resultadoFinal.ErroresDetalle.Add(msg);
+
+									// Matemáticas honestas: Discriminamos las notificaciones positivas de los errores/avisos reales
+									if (msg.Contains("Error") || msg.Contains("Aviso") || msg.Contains("Bloqueo"))
+									{
+										erroresReales++;
+									}
+								}
+								resultadoFinal.RegistrosFallidos += erroresReales;
+								resultadoFinal.RegistrosExitosos += (tablaCrudos.Rows.Count - erroresReales);
 							}
 							else
 							{
@@ -127,16 +138,13 @@ namespace swCargaMasivaIngresos.Services
 			}
 			catch (Exception ex)
 			{
-				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "ProcesadorReduccionesExcel", $"Fallo crítico: {ex.Message}").Wait();
+				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "ProcesadorPorPagarExcel", $"Fallo crítico: {ex.Message}").Wait();
 				throw;
 			}
 
 			return resultadoFinal;
 		}
 
-		/// <summary>
-		/// Método auxiliar para extraer valores de una fila de datos de manera segura.
-		/// </summary>
 		private string ExtraerSeguro(DataRow fila, MapeadorInteligente.MapaOficial mapa, string columna, string valorPorDefecto = "")
 		{
 			try
@@ -150,53 +158,53 @@ namespace swCargaMasivaIngresos.Services
 			}
 		}
 
-		/// <summary>
-		/// Estructura en memoria para organizar los datos extraídos de reducciones antes del volcado a la BD.
-		/// </summary>
-		private DataTable CrearEstructuraReducciones()
+		private DataTable CrearEstructuraPorPagar()
 		{
 			var tabla = new DataTable();
 			tabla.Columns.Add("ClaveMunicipio", typeof(string));
 			tabla.Columns.Add("TipoPredio", typeof(string));
 			tabla.Columns.Add("CuentaPredial", typeof(string));
-			tabla.Columns.Add("FolioUnico", typeof(string));
-			tabla.Columns.Add("TipoReduccion", typeof(string));
+			tabla.Columns.Add("Bimestre", typeof(string));
 			tabla.Columns.Add("FolioCarga", typeof(int));
+			tabla.Columns.Add("ImpuestoDeterminado", typeof(decimal));
+			tabla.Columns.Add("ClasePago", typeof(string));
+			tabla.Columns.Add("FechaVigencia", typeof(string));
+			tabla.Columns.Add("IdControl", typeof(int));
+			tabla.Columns.Add("FolioEmision", typeof(int));
 			return tabla;
 		}
 
-		/// <summary>
-		/// Método asíncrono que realiza la inserción masiva a Staging y ejecuta la ingesta de las reducciones.
-		/// Nota: La consolidación final de reducciones queda pendiente de reglas de negocio futuras.
-		/// </summary>
 		private async Task<List<string>> InsertarBulkAsync(DataTable lote, ParametrosCarga param)
 		{
-			var errores = new List<string>();
+			var alertas = new List<string>();
 			string usuarioLogin = param.UsuarioLogin;
-
+			
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
 				await conn.OpenAsync();
 
-				// PASO 1: Inserción Masiva a Staging
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred.p_staging_reducciones";
+					// 🚀 NOMBRE EXACTO DE LA TABLA EN SQL
+					bulkCopy.DestinationTableName = "pred.p_staging_porpagar";
 					bulkCopy.BatchSize = 10000;
 					bulkCopy.BulkCopyTimeout = 120;
 
 					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
 					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
 					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
-					bulkCopy.ColumnMappings.Add("FolioUnico", "FolioUnico");
-					bulkCopy.ColumnMappings.Add("TipoReduccion", "TipoReduccion");
+					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
 					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
+					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
+					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
+					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
+					bulkCopy.ColumnMappings.Add("IdControl", "IdControl");
+					bulkCopy.ColumnMappings.Add("FolioEmision", "FolioEmision");
 
 					await bulkCopy.WriteToServerAsync(lote);
 				}
 
-				// PASO 2: Ingesta (Merge Original)
-				using (SqlCommand cmd = new SqlCommand("pred.sp_ProcesarMergeReducciones", conn))
+				using (SqlCommand cmd = new SqlCommand("pred.sp_ProcesarMergePorPagar", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;
@@ -208,13 +216,12 @@ namespace swCargaMasivaIngresos.Services
 						{
 							string cuenta = reader["CuentaPredial"].ToString();
 							string mensaje = reader["MensajeError"].ToString();
-							errores.Add($"[Reducciones] Cuenta {cuenta}: {mensaje}");
+							alertas.Add($"[Exclusión] Cuenta {cuenta}: {mensaje}");
 						}
 					}
 				}
-				// PASO 3: Consolidación (Omitido intencionalmente hasta definir reglas de negocio)
 			}
-			return errores;
+			return alertas;
 		}
 	}
 }

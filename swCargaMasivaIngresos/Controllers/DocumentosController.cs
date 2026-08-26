@@ -9,6 +9,9 @@ using System.Web.Http;
 
 namespace swCargaMasivaIngresos.Controllers
 {
+	/// <summary>
+	/// Controlador API encargado de la generación de documentos PDF para los usuarios. Expone un endpoint para generar un paquete completo de documentos (Acta, Carta y Credencial) en un solo archivo PDF, basado en los datos proporcionados en la solicitud JSON. Utiliza el servicio ServicioGeneradorHTMLtoPDF para realizar la conversión de HTML a PDF.
+	/// </summary>
 	[RoutePrefix("api/documentos")]
 	public class DocumentosController : ApiController
 	{

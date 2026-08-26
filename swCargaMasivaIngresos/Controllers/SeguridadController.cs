@@ -191,8 +191,14 @@ namespace swCargaMasivaIngresos.Controllers
 		}
 	}
 
+	/// <summary>
+	/// Clase que representa la petición para validar un token SSO. Contiene la propiedad Token que se enviará desde el cliente para su validación en el servidor.
+	/// </summary>
 	public class PeticionToken
 	{
+		/// <summary>
+		/// El token SSO que se desea validar. Este token debe ser enviado desde el cliente y será verificado en el servidor para asegurar su autenticidad y origen.
+		/// </summary>
 		public string Token { get; set; }
 	}
 }

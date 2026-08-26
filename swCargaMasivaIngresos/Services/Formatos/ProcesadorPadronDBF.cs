@@ -11,10 +11,19 @@ using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services.Formatos
 {
+	/// <summary>
+	/// Clase encargada de procesar archivos de padrón en formato DBF. Esta clase implementa la interfaz IProcesadorFormato y se encarga de leer los datos del archivo DBF, validar su estructura y contenido, y luego insertar los registros válidos en la base de datos. También maneja la consolidación de adeudos y genera un reporte de errores para los registros que no pudieron ser procesados correctamente.
+	/// </summary>
 	public class ProcesadorPadronDBF : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+		/// <summary>
+		/// Procesa un archivo de padrón en formato DBF. Lee los datos del archivo, valida su estructura y contenido, y luego inserta los registros válidos en la base de datos. También maneja la consolidación de adeudos y genera un reporte de errores para los registros que no pudieron ser procesados correctamente.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -167,14 +176,7 @@ namespace swCargaMasivaIngresos.Services.Formatos
 		{
 			var erroresConsolidacion = new List<string>();
 
-			// 🚀 IMPLEMENTACIÓN DE SEGURIDAD (Usuario inyectado desde parámetros)
 			string usuarioLogin = param.UsuarioLogin;
-			int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
-			SeguridadService segService = new SeguridadService();
-
-			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergePadron", CadenaConexion, appId);
-			if (!estaAutorizado) throw new UnauthorizedAccessException("Acceso denegado.");
-
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
 				await conn.OpenAsync();

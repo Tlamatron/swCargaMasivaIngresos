@@ -288,6 +288,9 @@
     <Compile Include="Services\Configuracion\CorsSettings.cs" />
     <Compile Include="Services\Formatos\ProcesadorPadronDBF.cs" />
     <Compile Include="Services\Formatos\ProcesadorPagosDBF.cs" />
+    <Compile Include="Services\Formatos\ProcesadorPorPagarDBF.cs" />
+    <Compile Include="Services\Formatos\ProcesadorPorPagarExcel.cs" />
+    <Compile Include="Services\Formatos\ProcesadorPorPagarTXT.cs" />
     <Compile Include="Services\Formatos\ProcesadorReduccionesDBF.cs" />
     <Compile Include="Services\Integracion\FabricaAdaptadoresWS.cs" />
     <Compile Include="Services\Formatos\FabricaProcesadores.cs" />

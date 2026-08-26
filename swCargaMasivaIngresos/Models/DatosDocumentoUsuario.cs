@@ -86,8 +86,14 @@ namespace swCargaMasivaIngresos.Models
 		/// </summary>
 		public string NombreDirectorIngresos { get; set; }
 
+		/// <summary>
+		/// Nombre del municipio al que pertenece el usuario. Este campo es crucial para identificar la ubicación geográfica del usuario y puede ser utilizado en los documentos para reflejar su jurisdicción administrativa.
+		/// </summary>
 		public string Municipio { get; set; }
 
+		/// <summary>
+		/// Rol del usuario dentro del sistema o aplicación. Este campo es importante para determinar los permisos y accesos del usuario, y puede ser utilizado en los documentos para reflejar su nivel de autorización.
+		/// </summary>
 		public string Rol { get; set; }
 
 		/// <summary>

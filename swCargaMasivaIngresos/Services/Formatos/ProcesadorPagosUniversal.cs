@@ -4,9 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
-using System.IO;
 using System.Linq;
-using System.Net;
 using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services
@@ -292,25 +290,6 @@ namespace swCargaMasivaIngresos.Services
 			var erroresConsolidacion = new List<string>();
 
 			string usuarioLogin = param.UsuarioLogin;
-
-			SeguridadService segService = new SeguridadService();
-			int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
-			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergeEtiquetado", CadenaConexion, appId);
-
-			if (!estaAutorizado)
-			{
-				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosUniversal", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ProcesarMergeEtiquetado sin permisos.");
-
-				throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
-			}
-			estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ConsolidarAdeudos", CadenaConexion, appId);
-
-			if (!estaAutorizado)
-			{
-				await LogService.WriteLogAsync("ERROR", usuarioLogin, "ProcesadorPagosUniversal", $"El usuario {usuarioLogin} intentó ejecutar pred.sp_ConsolidarAdeudos sin permisos.");
-
-				throw new UnauthorizedAccessException("Acceso denegado. No tienes los roles necesarios para ejecutar esta operación.");
-			}
 
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{

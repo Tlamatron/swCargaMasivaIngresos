@@ -11,10 +11,19 @@ using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services.Formatos
 {
+	/// <summary>
+	/// Clase encargada de procesar archivos en formato DBF, validando su estructura y contenido, y luego insertando los datos válidos en la base de datos. Implementa la interfaz IProcesadorFormato para garantizar consistencia con otros procesadores de formatos.
+	/// </summary>
 	public class ProcesadorPagosDBF : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
+		/// <summary>
+		/// Procesa un archivo DBF, validando su estructura y contenido, y luego inserta los datos válidos en la base de datos.
+		/// </summary>
+		/// <param name="rutaArchivo"></param>
+		/// <param name="param"></param>
+		/// <returns></returns>
 		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
@@ -147,12 +156,6 @@ namespace swCargaMasivaIngresos.Services.Formatos
 			var erroresConsolidacion = new List<string>();
 
 			string usuarioLogin = param.UsuarioLogin;
-			int appId = Convert.ToInt32(System.Configuration.ConfigurationManager.AppSettings["AppId"] ?? "1");
-			SeguridadService segService = new SeguridadService();
-
-			bool estaAutorizado = await segService.TienePermisoEjecucionAsync(usuarioLogin, "pred.sp_ProcesarMergeEtiquetado", CadenaConexion, appId);
-			if (!estaAutorizado) throw new UnauthorizedAccessException("Acceso denegado.");
-
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
 				await conn.OpenAsync();

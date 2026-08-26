@@ -7,20 +7,19 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Threading.Tasks;
 
 namespace swCargaMasivaIngresos.Services.Formatos
 {
 	/// <summary>
-	/// Clase encargada de procesar archivos en formato DBF que contienen reducciones, validando su estructura y contenido, y luego insertando los datos válidos en la base de datos. Implementa la interfaz IProcesadorFormato para garantizar consistencia con otros procesadores de formatos.
+	/// Clase encargada de procesar archivos de exclusión "Por Pagar" en formato DBF.
 	/// </summary>
-	public class ProcesadorReduccionesDBF : IProcesadorFormato
+	public class ProcesadorPorPagarDBF : IProcesadorFormato
 	{
 		private readonly string CadenaConexion = ConfiguracionApp.ObtenerCadenaConexion();
 
 		/// <summary>
-		/// Procesa un archivo DBF de reducciones, validando su estructura y contenido, y luego insertando los datos válidos en la base de datos. Devuelve un objeto ResultadoProceso que contiene información sobre los registros exitosos, fallidos y detalles de errores.
+		/// Procesa un archivo DBF de exclusión "Por Pagar" y lo inserta en la base de datos.
 		/// </summary>
 		/// <param name="rutaArchivo"></param>
 		/// <param name="param"></param>
@@ -28,8 +27,7 @@ namespace swCargaMasivaIngresos.Services.Formatos
 		public async Task<ResultadoProceso> ProcesarAsync(string rutaArchivo, ParametrosCarga param)
 		{
 			var resultadoFinal = new ResultadoProceso { ErroresDetalle = new List<string>() };
-
-			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorReduccionesDBF", $"Iniciando Lectura de Reducciones DBF. Folio: {param.FolioCarga}").Wait();
+			LogService.WriteLogAsync("INFO", param.UsuarioLogin, "ProcesadorPorPagarDBF", $"Iniciando Lectura de archivo DBF Por Pagar. Folio: {param.FolioCarga}").Wait();
 
 			try
 			{
@@ -38,25 +36,23 @@ namespace swCargaMasivaIngresos.Services.Formatos
 				{
 					var columnNames = table.Columns.Select(c => c.Name.ToUpper()).ToList();
 
-					// 🚀 VALIDACIÓN FRONTAL
 					if (!columnNames.Contains("TIPO_PRED") && !columnNames.Contains("TIPO") && !columnNames.Contains("T_PREDIO"))
 					{
-						resultadoFinal.ErroresDetalle.Add("Rechazo Total: El DBF de Reducciones no contiene 'Tipo de Predio'.");
+						resultadoFinal.ErroresDetalle.Add("Rechazo Total: El archivo DBF no contiene la columna de 'Tipo de Predio'.");
 						resultadoFinal.RegistrosFallidos = 1;
 						return resultadoFinal;
 					}
 
-					string colCuenta = columnNames.FirstOrDefault(c => c == "NO_CONTROL" || c == "CUENTA") ?? "";
+					string colCuenta = columnNames.FirstOrDefault(c => c == "NO_CONTROL" || c.Contains("CUENTA")) ?? "";
 					string colTipoPredio = columnNames.FirstOrDefault(c => c == "TIPO_PRED" || c == "TIPO" || c == "T_PREDIO") ?? "";
-					string colReduccion = columnNames.FirstOrDefault(c => c.Contains("REDUCCION") || c.Contains("DESC") || c == "TIPO_RED") ?? "";
 
-					if (string.IsNullOrEmpty(colCuenta) || string.IsNullOrEmpty(colReduccion))
+					if (string.IsNullOrEmpty(colCuenta))
 					{
-						resultadoFinal.ErroresDetalle.Add("Rechazo Total: No se encontró la columna de Cuenta o Tipo de Reducción en el DBF.");
+						resultadoFinal.ErroresDetalle.Add("Rechazo Total: No se encontró la columna de Cuenta Predial (NO_CONTROL) en el archivo DBF.");
 						return resultadoFinal;
 					}
 
-					DataTable tablaCrudos = CrearEstructuraReducciones();
+					DataTable tablaCrudos = CrearEstructuraPorPagar();
 					var reader = table.OpenReader();
 
 					while (reader.Read())
@@ -70,38 +66,37 @@ namespace swCargaMasivaIngresos.Services.Formatos
 						else if (tipoPredioCrudo.ToUpper().StartsWith("R")) tipoPredio = "2";
 						else if (tipoPredioCrudo.ToUpper().StartsWith("S")) tipoPredio = "3";
 
-						string tipoReduccionStr = reader.GetString(colReduccion)?.Trim() ?? "";
-
-						if (!byte.TryParse(tipoReduccionStr, out byte tipoRed) || tipoRed < 1)
-						{
-							resultadoFinal.RegistrosFallidos++;
-							resultadoFinal.ErroresDetalle.Add($"Cuenta '{cuentaPredial}': Tipo de Reducción inválido ('{tipoReduccionStr}').");
-							continue;
-						}
-
-						string claveMunicipio = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
-
 						DataRow nuevaFila = tablaCrudos.NewRow();
-						nuevaFila["ClaveMunicipio"] = claveMunicipio;
+						nuevaFila["ClaveMunicipio"] = param.ClaveMunicipioDestino > 0 ? param.ClaveMunicipioDestino.ToString() : param.OficinaId.ToString();
 						nuevaFila["TipoPredio"] = tipoPredio;
 						nuevaFila["CuentaPredial"] = cuentaPredial;
-						nuevaFila["FolioUnico"] = "";
-						nuevaFila["TipoReduccion"] = tipoRed.ToString();
+						nuevaFila["Bimestre"] = "0"; // Asumimos anual por defecto en exclusión si no lo indican
 						nuevaFila["FolioCarga"] = param.FolioCarga;
+						nuevaFila["ImpuestoDeterminado"] = 0m;
+						nuevaFila["ClasePago"] = "1";
+						nuevaFila["FechaVigencia"] = DateTime.Now.ToString("yyyy-MM-dd");
+						nuevaFila["IdControl"] = DBNull.Value;
+						nuevaFila["FolioEmision"] = DBNull.Value;
 
 						tablaCrudos.Rows.Add(nuevaFila);
 					}
 
-					// 🚀 EJECUCIÓN ASÍNCRONA A BASE DE DATOS CON MATEMÁTICAS HONESTAS
 					if (tablaCrudos.Rows.Count > 0)
 					{
-						List<string> erroresLogicos = await InsertarBulkAsync(tablaCrudos, param);
-
-						if (erroresLogicos.Any())
+						List<string> alertasSP = await InsertarBulkAsync(tablaCrudos, param);
+						if (alertasSP.Any())
 						{
-							resultadoFinal.ErroresDetalle.AddRange(erroresLogicos);
-							resultadoFinal.RegistrosFallidos += erroresLogicos.Count;
-							resultadoFinal.RegistrosExitosos += (tablaCrudos.Rows.Count - erroresLogicos.Count);
+							int erroresReales = 0;
+							foreach (var msg in alertasSP)
+							{
+								resultadoFinal.ErroresDetalle.Add(msg);
+								if (msg.Contains("Error") || msg.Contains("Aviso") || msg.Contains("Bloqueo"))
+								{
+									erroresReales++;
+								}
+							}
+							resultadoFinal.RegistrosFallidos += erroresReales;
+							resultadoFinal.RegistrosExitosos += (tablaCrudos.Rows.Count - erroresReales);
 						}
 						else
 						{
@@ -112,60 +107,70 @@ namespace swCargaMasivaIngresos.Services.Formatos
 			}
 			catch (Exception ex)
 			{
-				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "ProcesadorReduccionesDBF", $"Fallo crítico: {ex.Message}").Wait();
-				resultadoFinal.ErroresDetalle.Add("Error al intentar abrir el archivo DBF de Reducciones.");
+				LogService.WriteLogAsync("ERROR", param.UsuarioLogin, "ProcesadorPorPagarDBF", $"Fallo al leer DBF: {ex.Message}").Wait();
+				resultadoFinal.ErroresDetalle.Add("Error al intentar abrir el archivo DBF.");
 			}
-
 			return resultadoFinal;
 		}
 
-		private DataTable CrearEstructuraReducciones()
+		private DataTable CrearEstructuraPorPagar()
 		{
 			var tabla = new DataTable();
 			tabla.Columns.Add("ClaveMunicipio", typeof(string));
 			tabla.Columns.Add("TipoPredio", typeof(string));
 			tabla.Columns.Add("CuentaPredial", typeof(string));
-			tabla.Columns.Add("FolioUnico", typeof(string));
-			tabla.Columns.Add("TipoReduccion", typeof(string));
+			tabla.Columns.Add("Bimestre", typeof(string));
 			tabla.Columns.Add("FolioCarga", typeof(int));
+			tabla.Columns.Add("ImpuestoDeterminado", typeof(decimal));
+			tabla.Columns.Add("ClasePago", typeof(string));
+			tabla.Columns.Add("FechaVigencia", typeof(string));
+			tabla.Columns.Add("IdControl", typeof(int));
+			tabla.Columns.Add("FolioEmision", typeof(int));
 			return tabla;
 		}
 
 		private async Task<List<string>> InsertarBulkAsync(DataTable lote, ParametrosCarga param)
 		{
-			var errores = new List<string>();
-
+			var alertas = new List<string>();
 			string usuarioLogin = param.UsuarioLogin;
 			using (SqlConnection conn = new SqlConnection(CadenaConexion))
 			{
 				await conn.OpenAsync();
 				using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn))
 				{
-					bulkCopy.DestinationTableName = "pred.p_staging_reducciones";
+					bulkCopy.DestinationTableName = "pred.p_staging_porpagar";
 					bulkCopy.BatchSize = 10000;
-					foreach (DataColumn col in lote.Columns) bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+					bulkCopy.ColumnMappings.Add("ClaveMunicipio", "ClaveMunicipio");
+					bulkCopy.ColumnMappings.Add("TipoPredio", "TipoPredio");
+					bulkCopy.ColumnMappings.Add("CuentaPredial", "CuentaPredial");
+					bulkCopy.ColumnMappings.Add("Bimestre", "Bimestre");
+					bulkCopy.ColumnMappings.Add("FolioCarga", "FolioCarga");
+					bulkCopy.ColumnMappings.Add("ImpuestoDeterminado", "ImpuestoDeterminado");
+					bulkCopy.ColumnMappings.Add("ClasePago", "ClasePago");
+					bulkCopy.ColumnMappings.Add("FechaVigencia", "FechaVigencia");
+					bulkCopy.ColumnMappings.Add("IdControl", "IdControl");
+					bulkCopy.ColumnMappings.Add("FolioEmision", "FolioEmision");
+
 					await bulkCopy.WriteToServerAsync(lote);
 				}
 
-				using (SqlCommand cmd = new SqlCommand("pred.sp_ProcesarMergeReducciones", conn))
+				using (SqlCommand cmd = new SqlCommand("pred.sp_ProcesarMergePorPagar", conn))
 				{
 					cmd.CommandType = CommandType.StoredProcedure;
 					cmd.CommandTimeout = 180;
 					cmd.Parameters.AddWithValue("@FolioCarga", param.FolioCarga);
-
-					// Usamos ExecuteReader en lugar de NonQuery para atrapar errores cuando el SP se actualice
 					using (var reader = await cmd.ExecuteReaderAsync())
 					{
 						while (await reader.ReadAsync())
 						{
 							string cuenta = reader["CuentaPredial"].ToString();
 							string mensaje = reader["MensajeError"].ToString();
-							errores.Add($"[Reducciones] Cuenta {cuenta}: {mensaje}");
+							alertas.Add($"[Exclusión] Cuenta {cuenta}: {mensaje}");
 						}
 					}
 				}
 			}
-			return errores;
+			return alertas;
 		}
 	}
 }
