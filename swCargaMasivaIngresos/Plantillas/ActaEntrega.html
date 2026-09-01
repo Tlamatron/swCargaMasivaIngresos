@@ -1,0 +1,109 @@
+﻿<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+    <meta charset="utf-8" />
+    <title>Acta de Entrega</title>
+    <style>
+        @page { size: letter; margin: 2cm; }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
+            color: #333;
+            line-height: 1.5;
+            background-image: url('{{MarcaAguaBase64}}');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 60%;
+        }
+        .header { width: 100%; border-bottom: 2px solid #691C32; padding-bottom: 10px; margin-bottom: 20px; }
+        .logo { max-height: 70px; }
+        .title { text-align: center; font-size: 14pt; font-weight: bold; color: #10353A; margin: 20px 0; }
+        .info-box { background-color: #f4f4f4; padding: 10px; border: 1px solid #ddd; margin-bottom: 20px; }
+        .text-justify { text-align: justify; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 30px; }
+        th, td { border: 1px solid #000; padding: 8px; text-align: center; font-size: 10pt; }
+        th { background-color: #10353A; color: white; }
+        .firmas { width: 100%; margin-top: 50px; text-align: center; page-break-inside: avoid; }
+        .firma-col { width: 45%; display: inline-block; vertical-align: top; }
+        .linea-firma { border-top: 1px solid #000; margin-top: 60px; padding-top: 5px; font-weight: bold; }
+        .footer { position: fixed; bottom: 0; left: 0; width: 100%; text-align: center; }
+        .footer img { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="{{LogoBase64}}" class="logo" alt="Gobierno del Estado de Puebla" />
+    </div>
+
+    <div class="info-box">
+        <strong>No. Acta:</strong> {{NumActa}}<br />
+        <strong>Usuario:</strong> {{UsuarioLogin}}<br />
+        <strong>CURP:</strong> {{CURP}}<br />
+        <strong>Nombre:</strong> {{NombreCompleto}}<br />
+        <strong>Sistema:</strong> {{NombreSistema}}<br />
+        <strong>URL:</strong> {{UrlSistema}}
+    </div>
+
+    <div class="title">Acta de Entrega de Credenciales de Acceso</div>
+
+    <div class="text-justify">
+        En la ciudad de Puebla, Pue., siendo las <strong>{{HoraEmision}}</strong> horas del día <strong>{{FechaEmision}}</strong>,
+        se generó el presente documento desde las oficinas que ocupa la Dirección de Ingresos, adscrita a la Coordinación General
+        de Ingresos de la Subsecretaría de Ingresos de la Secretaría de Planeación, Finanzas y Administración del Gobierno del Estado
+        de Puebla.
+    </div>
+
+    <div class="text-justify">
+        Se hace constar la entrega oficial de la cuenta de acceso y contraseña a la aplicación <strong>"{{NombreSistema}}"</strong>
+        al/la C. <strong>{{NombreCompleto}}</strong>, con cargo de <strong>{{CargoUsuario}}</strong>, adscrito(a) a
+        <strong>{{AreaAdscripcion}}</strong>, según número de identificación <strong>{{IdentificacionFolio}}</strong> extraído de
+        <strong>{{IdentificacionTipo}}</strong>, con correo electrónico de contacto <strong>{{CorreoElectronico}}</strong>.
+        Lo anterior, derivado de la solicitud de clave de acceso correspondiente.
+    </div>
+
+    <div class="text-justify">
+        Se reitera que es responsabilidad absoluta del usuario el manejo, resguardo y uso de la cuenta de acceso a la aplicación, así
+        como salvaguardar la confidencialidad de la información que en ella se procesa y muestra, referente a los Impuestos
+        Municipales Coordinados. El usuario manifiesta tener pleno conocimiento de las disposiciones legales que regulan
+        el manejo de la información y las sanciones por el uso indebido de la misma, contenidas en la Carta de Confidencialidad anexa.
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Tipo de Identificación</th>
+                <th>No. de Identificación</th>
+                <th>Adscripción</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>{{IdentificacionTipo}}</td>
+                <td>{{IdentificacionFolio}}</td>
+                <td>{{AreaAdscripcion}} - {{Municipio}}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="firmas">
+        <div class="firma-col">
+            <div class="linea-firma">
+                ENTREGÓ / AUTORIZÓ<br />
+                {{NombreDirectorIngresos}}<br />
+                <span style="font-weight: normal; font-size: 9pt;">Director de Ingresos<br />Secretaría de Planeación, Finanzas y Admón.</span>
+            </div>
+        </div>
+        <div class="firma-col" style="margin-left: 5%;">
+            <div class="linea-firma">
+                RECIBIÓ<br />
+                C. {{NombreCompleto}}<br />
+                <span style="font-weight: normal; font-size: 9pt;">{{CargoUsuario}}<br />{{AreaAdscripcion}}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <img src="{{PiePaginaBase64}}" alt="Pie de Página" />
+    </div>
+</body>
+</html>

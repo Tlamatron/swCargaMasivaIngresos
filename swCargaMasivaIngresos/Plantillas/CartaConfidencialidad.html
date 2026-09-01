@@ -1,0 +1,77 @@
+﻿<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+    <meta charset="utf-8" />
+    <title>Carta de Confidencialidad</title>
+    <style>
+        @page { size: letter; margin: 2.5cm 2cm; }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
+            color: #333;
+            line-height: 1.6;
+            background-image: url('{{MarcaAguaBase64}}');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 70%;
+        }
+        .header { width: 100%; border-bottom: 2px solid #691C32; padding-bottom: 10px; margin-bottom: 20px; }
+        .logo { max-height: 70px; }
+        .title { text-align: center; font-size: 13pt; font-weight: bold; color: #10353A; margin: 20px 0; }
+        .text-justify { text-align: justify; margin-bottom: 15px; }
+        ol { text-align: justify; margin-bottom: 20px; padding-left: 20px; }
+        ol li { margin-bottom: 10px; }
+        .firma-container { text-align: center; margin-top: 60px; page-break-inside: avoid; }
+        .linea-firma { border-top: 1px solid #000; display: inline-block; width: 300px; padding-top: 5px; font-weight: bold; }
+        .footer { position: fixed; bottom: 0; left: 0; width: 100%; text-align: center; }
+        .footer img { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="{{LogoBase64}}" class="logo" alt="Gobierno del Estado de Puebla" />
+    </div>
+
+    <div class="title">CARTA DE CONFIDENCIALIDAD Y SEGURIDAD DE LA INFORMACIÓN</div>
+
+    <div><strong>A quien corresponda.<br />Presente.</strong></div>
+
+    <p>Datos del (la) servidor(a) público(a) / usuario(a):</p>
+    <ul>
+        <li><strong>Nombre:</strong> {{NombreCompleto}}</li>
+        <li><strong>C.U.R.P.:</strong> {{CURP}}</li>
+        <li><strong>Lugar o área de adscripción:</strong> {{AreaAdscripcion}} / {{Municipio}}</li>
+    </ul>
+
+    <div class="text-justify">
+        El/la suscrito(a) C. <strong>{{NombreCompleto}}</strong>, cuyos datos de identificación han quedado debidamente descritos, manifiesto lo siguiente:
+    </div>
+
+    <ol>
+        <li>Que tengo conocimiento que la Secretaría de Planeación, Finanzas y Administración es una Dependencia de la Administración Pública Centralizada del Estado, en términos de lo dispuesto en el artículo 31, fracción II de la Ley Orgánica de la Administración Pública del Estado de Puebla vigente.</li>
+        <li>Que conozco lo dispuesto por la Ley de Gobierno Digital para el Estado de Puebla y sus Municipios, específicamente en sus artículos 51 y 52, comprendiendo que soy directamente responsable del manejo, disposición, protección y seguridad de los datos a los que tengo acceso, los cuales no pueden ser cedidos, divulgados ni utilizados para fines distintos a los de mi encargo oficial.</li>
+        <li>Que tengo conocimiento de que el Reglamento Interior de la Secretaría de Ciencia, Humanidades, Tecnología e Innovación, así como la Ley de Gobierno Digital, mandatan la protección de la ciberseguridad. Entiendo que está estrictamente prohibido facilitar mis credenciales de acceso a terceros no autorizados.</li>
+        <li>Que tengo pleno conocimiento de las sanciones administrativas y penales a las que puede hacerse acreedor el servidor público que revele, haga uso indebido de cualquier información confidencial o vulnere la seguridad de los sistemas informáticos, atento a lo señalado en la Ley General de Responsabilidades Administrativas y el Código Penal.</li>
+    </ol>
+
+    <div class="text-justify">
+        Por lo anterior, en pleno uso de mis facultades y de manera voluntaria, me obligo a guardar absoluta reserva, confidencialidad y a observar las mejores prácticas de ciberseguridad en el manejo de la información contenida en los sistemas, comprometiéndome a utilizar el sistema <strong>"{{NombreSistema}}"</strong> única y exclusivamente para los fines de gestión dentro del marco legal vigente.
+    </div>
+
+    <div class="text-justify" style="margin-top: 20px;">
+        Dado a los <strong>{{FechaEmision}}</strong>.
+    </div>
+
+    <div class="firma-container">
+        ATENTAMENTE<br /><br /><br /><br />
+        <div class="linea-firma">
+            C. {{NombreCompleto}}<br />
+            <span style="font-weight: normal; font-size: 10pt;">{{CargoUsuario}}</span>
+        </div>
+    </div>
+
+    <div class="footer">
+        <img src="{{PiePaginaBase64}}" alt="Pie de Página" />
+    </div>
+</body>
+</html>

@@ -39,9 +39,6 @@ namespace swCargaMasivaIngresos.Controllers
 
 			try
 			{
-				// 🚀 SE ELIMINÓ LA VALIDACIÓN DE SEGURIDAD AQUÍ
-				// Vamos directo a validar las credenciales contra la base de datos
-
 				using (SqlConnection conn = new SqlConnection(CadenaConexion))
 				using (SqlCommand cmd = new SqlCommand("pred.sp_ValidarUsuario", conn))
 				{
